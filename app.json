@@ -1,0 +1,44 @@
+{
+  "name": "Construction Bot",
+  "description": "Telegram bot for construction material orders",
+  "keywords": ["telegram", "bot", "aiogram", "python"],
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram Bot API token (from @BotFather)",
+      "required": true
+    },
+    "MANAGER_IDS": {
+      "description": "Comma-separated list of manager Telegram user IDs",
+      "required": false,
+      "value": ""
+    },
+    "TIMEZONE": {
+      "description": "Timezone for timestamps (e.g. Asia/Tashkent)",
+      "required": false,
+      "value": "Asia/Tashkent"
+    },
+    "LOG_LEVEL": {
+      "description": "Logging level: DEBUG, INFO, WARNING, ERROR",
+      "required": false,
+      "value": "INFO"
+    }
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:essential-0",
+      "as": "DATABASE"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}
