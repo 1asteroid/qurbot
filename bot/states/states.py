@@ -1,0 +1,28 @@
+from aiogram.fsm.state import State, StatesGroup
+
+
+class RegisterStates(StatesGroup):
+    waiting_full_name = State()
+    waiting_phone = State()
+
+
+class OrderStates(StatesGroup):
+    selecting_user = State()
+    searching_user = State()
+    selecting_product = State()
+    entering_quantity = State()
+    entering_price = State()
+    reviewing_order = State()
+    confirming_order = State()
+
+
+class ProductStates(StatesGroup):
+    entering_name = State()
+    entering_unit = State()
+    editing_name = State()
+    editing_unit = State()
+    confirm_delete = State()
+
+
+class MonitoringStates(StatesGroup):
+    selecting_custom_month = State()

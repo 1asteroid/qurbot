@@ -1,0 +1,37 @@
+from bot.keyboards.reply import (
+    main_menu_keyboard,
+    user_menu_keyboard,
+    phone_keyboard,
+    remove_keyboard,
+    cancel_keyboard,
+)
+from bot.keyboards.inline import (
+    users_keyboard,
+    products_select_keyboard,
+    order_review_keyboard,
+    products_list_keyboard,
+    product_detail_keyboard,
+    unit_keyboard,
+    confirm_delete_keyboard,
+    order_history_keyboard,
+    order_detail_keyboard,
+    monitoring_keyboard,
+)
+
+__all__ = [
+    "main_menu_keyboard",
+    "user_menu_keyboard",
+    "phone_keyboard",
+    "remove_keyboard",
+    "cancel_keyboard",
+    "users_keyboard",
+    "products_select_keyboard",
+    "order_review_keyboard",
+    "products_list_keyboard",
+    "product_detail_keyboard",
+    "unit_keyboard",
+    "confirm_delete_keyboard",
+    "order_history_keyboard",
+    "order_detail_keyboard",
+    "monitoring_keyboard",
+]
