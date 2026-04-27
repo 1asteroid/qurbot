@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 
 from aiogram import Bot, Dispatcher
@@ -14,14 +15,16 @@ from bot.middlewares import DbSessionMiddleware, ManagerCheckMiddleware
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 
+_log_handlers: list = [logging.StreamHandler(sys.stdout)]
+if not any(v in ("1", "true", "yes") for v in [os.environ.get("DYNO", "")]):
+    # Add file handler only when not running on Heroku (no persistent filesystem)
+    _log_handlers.append(logging.FileHandler("bot.log", encoding="utf-8"))
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("bot.log", encoding="utf-8"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger(__name__)
 
