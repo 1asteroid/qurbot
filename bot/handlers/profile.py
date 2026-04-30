@@ -4,8 +4,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.states import RegisterStates
-from bot.keyboards import main_menu_keyboard, remove_keyboard, phone_keyboard
+from config import settings
+from bot.states import ProfileEditStates
+from bot.keyboards import main_menu_keyboard, remove_keyboard, phone_keyboard, order_receipt_keyboard
 from services import UserService, OrderService
 from utils import build_receipt, format_number, generate_receipt_pdf
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
@@ -13,6 +14,27 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def _profile_keyboard(user):
+    builder = InlineKeyboardBuilder()
+    if not settings.is_permanent_manager(user.telegram_id):
+        builder.row(
+            InlineKeyboardButton(text="✏️ Ism/Familiya", callback_data="update_full_name")
+        )
+        builder.row(
+            InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
+        )
+    if user.is_manager:
+        builder.row(
+            InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
+            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(text="📋 Mening buyurtmalarim", callback_data="my_orders")
+        )
+    return builder.as_markup()
 
 
 # ─── User Profile ─────────────────────────────────────────────────────────────
@@ -37,39 +59,29 @@ async def show_profile(message: Message, session: AsyncSession):
         f"📅 <b>Ro'yxat sana:</b> {user.created_at.strftime('%d.%m.%Y')}\n"
     )
     
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="✏️ Ism/Familiya", callback_data="update_full_name")
-    )
-    builder.row(
-        InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
-    )
-    if user.is_manager:
-        builder.row(
-            InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
-            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
-        )
-    else:
-        builder.row(
-            InlineKeyboardButton(text="📋 Mening buyurtmalarim", callback_data="my_orders")
-        )
-    
-    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await message.answer(text, parse_mode="HTML", reply_markup=_profile_keyboard(user))
 
 
 # ─── Update Full Name ─────────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "update_full_name")
-async def start_update_full_name(callback: CallbackQuery, state: FSMContext):
+async def start_update_full_name(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     """Ism/Familiya o'zgartirish boshlash"""
-    await state.set_state(RegisterStates.waiting_full_name)
-    await callback.message.answer(
-        "✏️ Yangi ism/familiyangizni kiriting:"
-    )
+    user_service = UserService(session)
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not user:
+        await callback.answer("❌ Foydalanuvchi topilmadi.", show_alert=True)
+        return
+    if settings.is_permanent_manager(user.telegram_id):
+        await callback.answer("🔒 Sizning profilingizni tahrirlab bo'lmaydi.", show_alert=True)
+        return
+
+    await state.set_state(ProfileEditStates.editing_full_name)
+    await callback.message.answer("✏️ Yangi ism/familiyangizni kiriting:")
     await callback.answer()
 
 
-@router.message(RegisterStates.waiting_full_name)
+@router.message(ProfileEditStates.editing_full_name)
 async def update_full_name(message: Message, state: FSMContext, session: AsyncSession):
     """Ism/Familiya yangilash"""
     full_name = message.text.strip()
@@ -101,19 +113,23 @@ async def update_full_name(message: Message, state: FSMContext, session: AsyncSe
         await state.clear()
 
 @router.callback_query(F.data == "update_phone")
-async def start_update_phone(callback: CallbackQuery, state: FSMContext):
+async def start_update_phone(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     """Telefon raqam o'zgartirish boshlash"""
-    from bot.keyboards import phone_keyboard
-    
-    await state.set_state(RegisterStates.waiting_phone)
-    await callback.message.answer(
-        "📱 Yangi telefon raqamingizni yuboring:",
-        reply_markup=phone_keyboard()
-    )
+    user_service = UserService(session)
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not user:
+        await callback.answer("❌ Foydalanuvchi topilmadi.", show_alert=True)
+        return
+    if settings.is_permanent_manager(user.telegram_id):
+        await callback.answer("🔒 Sizning profilingizni tahrirlab bo'lmaydi.", show_alert=True)
+        return
+
+    await state.set_state(ProfileEditStates.editing_phone)
+    await callback.message.answer("📱 Yangi telefon raqamingizni yuboring:", reply_markup=phone_keyboard())
     await callback.answer()
 
 
-@router.message(RegisterStates.waiting_phone)
+@router.message(ProfileEditStates.editing_phone)
 async def update_phone(message: Message, state: FSMContext, session: AsyncSession):
     """Telefon raqamini yangilash"""
     if message.contact:
@@ -260,24 +276,7 @@ async def back_to_profile_from_orders(callback: CallbackQuery, session: AsyncSes
         f"📅 <b>Ro'yxat sana:</b> {user.created_at.strftime('%d.%m.%Y')}\n"
     )
     
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="✏️ Ism/Familiya", callback_data="update_full_name")
-    )
-    builder.row(
-        InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
-    )
-    if user.is_manager:
-        builder.row(
-            InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
-            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
-        )
-    else:
-        builder.row(
-            InlineKeyboardButton(text="📋 Mening buyurtmalarim", callback_data="my_orders")
-        )
-    
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_profile_keyboard(user))
     await callback.answer()
 
 
@@ -305,25 +304,10 @@ async def show_order_receipt(callback: CallbackQuery, session: AsyncSession, bot
     if order.accepted_at:
         receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
     
-    builder = InlineKeyboardBuilder()
-    
-    # Show accept button only if order status is pending (not yet accepted)
-    if order.status == "pending":
-        builder.row(
-            InlineKeyboardButton(text="✅ Buyurtmani qabul qildim", callback_data=f"accept_order:{order.id}")
-        )
-    
-    builder.row(
-        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order.id}")
-    )
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="my_orders")
-    )
-    
     await callback.message.edit_text(
         f"<pre>{receipt_text}</pre>",
         parse_mode="HTML",
-        reply_markup=builder.as_markup()
+        reply_markup=order_receipt_keyboard(order.id, can_accept=order.status == "pending", back_callback="my_orders")
     )
     await callback.answer()
 
@@ -378,18 +362,10 @@ async def accept_order_handler(callback: CallbackQuery, session: AsyncSession, b
     receipt_text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
     receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
     
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order.id}")
-    )
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="my_orders")
-    )
-    
     await callback.message.edit_text(
         f"<pre>{receipt_text}</pre>",
         parse_mode="HTML",
-        reply_markup=builder.as_markup()
+        reply_markup=order_receipt_keyboard(order.id, can_accept=False, back_callback="my_orders")
     )
     await callback.answer("✅ Buyurtma qabul qilindi!")
 

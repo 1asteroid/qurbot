@@ -63,7 +63,7 @@ def products_select_keyboard(
         for category in categories:
             mark = "✅ " if active_category_id == category.id else ""
             builder.button(
-                text=f"{mark}{category.name}",
+                text=f"📁 {mark}{category.name}",
                 callback_data=f"{category_callback_prefix}:{category.id}",
             )
         builder.adjust(2)
@@ -107,7 +107,7 @@ def products_list_keyboard(
         for category in categories:
             mark = "✅ " if active_category_id == category.id else ""
             builder.button(
-                text=f"{mark}{category.name}",
+                text=f"📁 {mark}{category.name}",
                 callback_data=f"{category_callback_prefix}:{category.id}",
             )
         builder.adjust(2)
@@ -134,9 +134,24 @@ def product_detail_keyboard(product_id: int, back_callback: Optional[str] = None
     return builder.as_markup()
 
 
+def order_receipt_keyboard(order_id: int, can_accept: bool = False, back_callback: str = "my_orders") -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if can_accept:
+        builder.row(
+            InlineKeyboardButton(text="✅ Buyurtmani qabul qildim", callback_data=f"accept_order:{order_id}")
+        )
+    builder.row(
+        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order_id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data=back_callback)
+    )
+    return builder.as_markup()
+
+
 def unit_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for unit in ["kg", "dona", "metr", "litr", "qop"]:
+    for unit in ["chelak", "dona", "metr"]:
         builder.button(text=unit, callback_data=f"unit:{unit}")
     builder.adjust(3)
     builder.row(
@@ -154,7 +169,9 @@ def manager_orders_keyboard(orders: List[Order], page: int, total: int, per_page
     for order in orders:
         # Format: Order #123 - Customer Name - Total UZS
         from utils import format_number
-        text = f"🧾 #{order.id} - {order.user.full_name} ({format_number(order.total_sum)} UZS)"
+        status_mark = "✅" if order.status == "accepted" else "⏳"
+        status_text = "Qabul qilingan" if order.status == "accepted" else "Qabul qilinmagan"
+        text = f"{status_mark} #{order.id} - {order.user.full_name} ({format_number(order.total_sum)} UZS) | {status_text}"
         builder.row(
             InlineKeyboardButton(text=text, callback_data=f"manager_order_detail:{order.id}")
         )
@@ -188,9 +205,17 @@ def manager_orders_keyboard(orders: List[Order], page: int, total: int, per_page
     return builder.as_markup()
 
 
-def manager_order_detail_keyboard(order_id: int) -> InlineKeyboardMarkup:
+def manager_order_detail_keyboard(order_id: int, status: str) -> InlineKeyboardMarkup:
     """Keyboard for viewing manager order details"""
     builder = InlineKeyboardBuilder()
+    if status == "accepted":
+        builder.row(
+            InlineKeyboardButton(text="⏳ Qabul qilinmagan qilish", callback_data=f"manager_toggle_accept:{order_id}")
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(text="✅ Qabul qilingan qilish", callback_data=f"manager_toggle_accept:{order_id}")
+        )
     builder.row(
         InlineKeyboardButton(text="📋 Buyurtmalarim", callback_data="manager_orders_list")
     )

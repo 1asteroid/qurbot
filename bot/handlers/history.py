@@ -68,9 +68,41 @@ async def show_manager_order_detail(callback: CallbackQuery, session: AsyncSessi
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=manager_order_detail_keyboard(order_id),
+        reply_markup=manager_order_detail_keyboard(order_id, order.status),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("manager_toggle_accept:"))
+async def toggle_manager_order_status(callback: CallbackQuery, session: AsyncSession):
+    user_service = UserService(session)
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not user or not user.is_manager:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    order_id = int(callback.data.split(":")[1])
+    order_service = OrderService(session)
+    order = await order_service.get_order_with_details(order_id)
+
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    new_status = "pending" if order.status == "accepted" else "accepted"
+    order = await order_service.set_order_status(order, new_status)
+
+    text = build_receipt(order)
+    text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
+    if order.accepted_at:
+        text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+
+    await callback.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=manager_order_detail_keyboard(order.id, order.status),
+    )
+    await callback.answer("✅ Holat yangilandi!")
 
 
 async def _send_orders_page(event, session: AsyncSession, page: int, edit: bool):

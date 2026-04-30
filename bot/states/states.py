@@ -6,6 +6,11 @@ class RegisterStates(StatesGroup):
     waiting_phone = State()
 
 
+class ProfileEditStates(StatesGroup):
+    editing_full_name = State()
+    editing_phone = State()
+
+
 class OrderStates(StatesGroup):
     selecting_user = State()
     selecting_category = State()

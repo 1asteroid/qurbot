@@ -174,10 +174,14 @@ class OrderService:
         """Mark order as accepted"""
         order = await self.get_order_with_details(order_id)
         if order:
-            order.status = "accepted"
-            order.accepted_at = now_tashkent()
-            self.session.add(order)
-            await self.session.commit()
-            await self.session.refresh(order)
-            logger.info(f"Order {order_id} accepted at {order.accepted_at}")
+            await self.set_order_status(order, "accepted")
+        return order
+
+    async def set_order_status(self, order: Order, status: str) -> Order:
+        order.status = status
+        order.accepted_at = now_tashkent() if status == "accepted" else None
+        self.session.add(order)
+        await self.session.commit()
+        await self.session.refresh(order)
+        logger.info(f"Order {order.id} status changed to {status}")
         return order

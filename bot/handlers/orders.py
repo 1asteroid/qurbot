@@ -11,6 +11,7 @@ from bot.keyboards import (
     category_switch_keyboard,
     products_select_keyboard,
     order_review_keyboard,
+    order_receipt_keyboard,
     main_menu_keyboard,
     cancel_keyboard,
 )
@@ -199,14 +200,7 @@ async def select_category(callback: CallbackQuery, state: FSMContext, session: A
     await callback.message.edit_text(
         "📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(
-            products,
-            [],
-            categories=categories,
-            active_category_id=category_id,
-            category_callback_prefix="select_category",
-            back_callback="back_to_category_select",
-        ),
+        reply_markup=products_select_keyboard(products, [], back_callback="back_to_category_select"),
     )
     await callback.answer()
 
@@ -235,14 +229,7 @@ async def switch_order_category(callback: CallbackQuery, state: FSMContext, sess
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
         f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(
-            products,
-            data.get("selected_product_ids", []),
-            categories=categories,
-            active_category_id=category_id,
-            category_callback_prefix="select_category",
-            back_callback="back_to_category_select",
-        ),
+        reply_markup=products_select_keyboard(products, data.get("selected_product_ids", []), back_callback="back_to_category_select"),
     )
     await callback.answer()
 
@@ -403,6 +390,11 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, session: Asy
             chat_id=full_order.user.telegram_id,
             text=f"<pre>{receipt_text}</pre>",
             parse_mode="HTML",
+            reply_markup=order_receipt_keyboard(
+                full_order.id,
+                can_accept=full_order.status == "pending",
+                back_callback="my_orders",
+            ),
         )
         
         # Send PDF receipt
