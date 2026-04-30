@@ -49,6 +49,18 @@ def products_select_keyboard(
     return builder.as_markup()
 
 
+def categories_keyboard(categories: List["Category"]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for c in categories:
+        builder.row(
+            InlineKeyboardButton(text=f"📁 {c.name}", callback_data=f"select_category:{c.id}")
+        )
+    builder.row(
+        InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_order")
+    )
+    return builder.as_markup()
+
+
 def order_review_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(

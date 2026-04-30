@@ -66,20 +66,21 @@ async def select_user(callback: CallbackQuery, state: FSMContext, session: Async
         return
 
     await state.update_data(selected_user_id=user_id, order_items=[])
-    await state.set_state(OrderStates.selecting_product)
-
+    # Show categories first for manager to pick
+    await state.set_state(OrderStates.selecting_category)
+    from services import ProductService
     prod_service = ProductService(session)
-    products = await prod_service.get_all()
+    categories = await prod_service.get_all_categories()
 
-    if not products:
-        await callback.message.edit_text("❌ Mahsulotlar mavjud emas. Avval mahsulot qo'shing.")
+    if not categories:
+        await callback.message.edit_text("❌ Mahsulotlar kategoriyalari mavjud emas. Avval kategoriya va mahsulot qo'shing.")
         return
 
     await callback.message.edit_text(
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
-        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
+        f"📂 <b>Mahsulot kategoriyasini tanlang</b>:",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(products, []),
+        reply_markup=categories_keyboard(categories),
     )
     await callback.answer()
 
@@ -179,6 +180,26 @@ async def add_product_to_order(callback: CallbackQuery, state: FSMContext, sessi
             reply_markup=cancel_keyboard(),
         )
     
+    await callback.answer()
+
+
+@router.callback_query(OrderStates.selecting_category, F.data.startswith("select_category:"))
+async def select_category(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    category_id = int(callback.data.split(":")[1])
+    await state.update_data(selected_category_id=category_id)
+    await state.set_state(OrderStates.selecting_product)
+    prod_service = ProductService(session)
+    products = await prod_service.get_by_category(category_id)
+
+    if not products:
+        await callback.message.edit_text("❌ Ushbu kategoriyada mahsulot topilmadi.")
+        return
+
+    await callback.message.edit_text(
+        "📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
+        parse_mode="HTML",
+        reply_markup=products_select_keyboard(products, []),
+    )
     await callback.answer()
 
 

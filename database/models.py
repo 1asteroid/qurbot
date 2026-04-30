@@ -41,12 +41,27 @@ class Product(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[str] = mapped_column(String(20), nullable=False)  # kg, dona, metr
+    category_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_tashkent, nullable=False)
 
     order_items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="product", lazy="selectin")
+    category: Mapped[Optional["Category"]] = relationship("Category", back_populates="products", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Product id={self.id} name={self.name}>"
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_tashkent, nullable=False)
+
+    products: Mapped[List[Product]] = relationship("Product", back_populates="category", lazy="selectin")
+
+    def __repr__(self) -> str:
+        return f"<Category id={self.id} name={self.name}>"
 
 
 class Order(Base):

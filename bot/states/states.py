@@ -8,6 +8,7 @@ class RegisterStates(StatesGroup):
 
 class OrderStates(StatesGroup):
     selecting_user = State()
+    selecting_category = State()
     searching_user = State()
     selecting_product = State()
     entering_quantity = State()
