@@ -152,7 +152,7 @@ async def update_phone(message: Message, state: FSMContext, session: AsyncSessio
 
 # ─── My Orders ────────────────────────────────────────────────────────────────
 
-@router.message(F.text == "📋 Mening buyurtmalarim")
+@router.message((F.text == "📋 Mening buyurtmalarim") | (F.text == "🧾 Mening buyurtmalarim"))
 async def show_my_orders_message(message: Message, session: AsyncSession):
     """Foydalanuvchining o'z buyurtmalarini ko'rish (reply keyboard orqali)"""
     user_service = UserService(session)

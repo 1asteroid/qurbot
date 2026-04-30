@@ -42,6 +42,25 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, 
             )
         return
 
+    # Permanent manager bootstrap: if this Telegram ID is configured as permanent manager,
+    # create the user record automatically so /start never asks for registration again.
+    if settings.is_permanent_manager(message.from_user.id):
+        full_name = message.from_user.full_name or message.from_user.first_name or "Manager"
+        phone = "unknown"
+        user = await service.create(
+            telegram_id=message.from_user.id,
+            full_name=full_name,
+            phone=phone,
+        )
+        await state.clear()
+        await message.answer(
+            f"👋 Xush kelibsiz, <b>{user.full_name}</b>!\n"
+            f"Siz menejer sifatida avtomatik tanildingiz. Asosiy menyu:",
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(),
+        )
+        return
+
     await state.set_state(RegisterStates.waiting_full_name)
     await message.answer(
         "👋 <b>Qurilish materiallari do'koniga xush kelibsiz!</b>\n\n"

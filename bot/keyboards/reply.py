@@ -19,7 +19,7 @@ def user_menu_keyboard() -> ReplyKeyboardMarkup:
     """Oddiy foydalanuvchi uchun menyu"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🧾 Mening buyurtmalarim"), KeyboardButton(text="👤 Profil")],
+            [KeyboardButton(text="📋 Mening buyurtmalarim"), KeyboardButton(text="👤 Profil")],
             [KeyboardButton(text="👨‍💻 Dasturchi bilan bog'lanish")],
         ],
         resize_keyboard=True,
