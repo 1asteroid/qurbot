@@ -27,7 +27,7 @@ def build_receipt(order: Order) -> str:
 
     for item in order.items:
         name = item.product.name[:17]
-        qty = f"{item.quantity:.0f} {item.product.unit}"
+        qty = f"{item.quantity:.0f}"
         price = format_number(item.price)
         total = format_number(item.total_price)
         lines.append(f"{name:<18} {qty:<8} {price:<10} {total}")
@@ -49,14 +49,13 @@ def build_order_preview(items: List[dict], products_map: dict) -> str:
     for i, item in enumerate(items, 1):
         product = products_map.get(item["product_id"])
         name = product.name if product else "Noma'lum"
-        unit = product.unit if product else ""
         qty = item["quantity"]
         price = item["price"]
         t = item["total_price"]
         total += t
         lines.append(
             f"{i}. <b>{name}</b>\n"
-            f"   {qty:.0f} {unit} × {format_number(price)} = {format_number(t)} UZS"
+            f"   {qty:.0f} × {format_number(price)} = {format_number(t)} UZS"
         )
 
     lines.append("─" * 35)

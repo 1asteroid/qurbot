@@ -6,7 +6,7 @@ from aiogram.filters import Command
 logger = logging.getLogger(__name__)
 router = Router()
 
-DEVELOPER_CONTACT = "@your_developer_username"  # ← Change this
+DEVELOPER_CONTACT = "@diyorbek_04"  # ← Change this
 
 
 @router.message(F.text == "👨‍💻 Dasturchi bilan bog'lanish")

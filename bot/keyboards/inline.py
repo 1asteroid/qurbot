@@ -71,7 +71,7 @@ def products_select_keyboard(
         mark = "✅ " if product.id in selected_ids else ""
         builder.row(
             InlineKeyboardButton(
-                text=f"{mark}{product.name} ({product.unit})",
+                text=f"{mark}{product.name}",
                 callback_data=f"add_product:{product.id}",
             )
         )
@@ -114,7 +114,7 @@ def products_list_keyboard(
     for product in products:
         builder.row(
             InlineKeyboardButton(
-                text=f"📦 {product.name} ({product.unit})",
+                text=f"📦 {product.name}",
                 callback_data=f"product_detail:{product.id}",
             )
         )

@@ -114,33 +114,76 @@ async def product_detail(callback: CallbackQuery, session: AsyncSession):
 # ─── Add product ──────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "add_product_start")
-async def start_add_product(callback: CallbackQuery, state: FSMContext):
+async def start_add_product(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    service = ProductService(session)
+    categories = await service.get_all_categories()
+    if not categories:
+        await callback.answer("❌ Avval kategoriya qo'shing.", show_alert=True)
+        return
+
     await state.set_state(ProductStates.entering_name)
     await callback.message.answer("📦 Yangi mahsulot nomini kiriting:")
     await callback.answer()
 
 
 @router.message(ProductStates.entering_name)
-async def process_product_name(message: Message, state: FSMContext):
+async def process_product_name(message: Message, state: FSMContext, session: AsyncSession):
     if not message.text or len(message.text.strip()) < 2:
         await message.answer("❗ Iltimos, mahsulot nomini kiriting (kamida 2 belgi).")
         return
+    service = ProductService(session)
+    categories = await service.get_all_categories()
+    if not categories:
+        await state.clear()
+        await message.answer("❌ Kategoriyalar topilmadi. Avval kategoriya yarating.")
+        return
+
     await state.update_data(product_name=message.text.strip())
-    await state.set_state(ProductStates.entering_unit)
+    await state.set_state(ProductStates.selecting_category)
     await message.answer(
+        "📂 Kategoriyani tanlang:",
+        reply_markup=category_switch_keyboard(
+            categories=categories,
+            callback_prefix="create_product_category",
+            back_callback="cancel_product",
+        ),
+    )
+
+
+@router.callback_query(ProductStates.selecting_category, F.data.startswith("create_product_category:"))
+async def process_product_category(callback: CallbackQuery, state: FSMContext):
+    category_id = int(callback.data.split(":")[1])
+    await state.update_data(product_category_id=category_id)
+    await state.set_state(ProductStates.entering_unit)
+    await callback.message.edit_text(
         "📏 O'lchov birligini tanlang:",
         reply_markup=unit_keyboard(),
     )
+    await callback.answer()
 
+
+@router.message(ProductStates.selecting_category)
+async def remind_product_category_choice(message: Message, session: AsyncSession):
+    service = ProductService(session)
+    categories = await service.get_all_categories()
+    await message.answer(
+        "📂 Kategoriyani tugmalar orqali tanlang:",
+        reply_markup=category_switch_keyboard(
+            categories=categories,
+            callback_prefix="create_product_category",
+            back_callback="cancel_product",
+        ),
+    )
 
 @router.callback_query(ProductStates.entering_unit, F.data.startswith("unit:"))
 async def process_product_unit(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     unit = callback.data.split(":")[1]
     data = await state.get_data()
     product_name = data["product_name"]
+    category_id = data.get("product_category_id")
 
     service = ProductService(session)
-    product = await service.create(name=product_name, unit=unit)
+    product = await service.create(name=product_name, unit=unit, category_id=category_id)
     await state.clear()
 
     await callback.message.edit_text(

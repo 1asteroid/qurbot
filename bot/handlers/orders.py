@@ -16,7 +16,7 @@ from bot.keyboards import (
     cancel_keyboard,
 )
 from services import UserService, ProductService, OrderService
-from utils import build_receipt, build_order_preview, generate_receipt_pdf
+from utils import build_receipt, build_order_preview, generate_receipt_pdf, format_number
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -28,6 +28,24 @@ async def _get_products_map(session: AsyncSession) -> dict:
     service = ProductService(session)
     products = await service.get_all()
     return {p.id: p for p in products}
+
+
+def _build_selection_summary(order_items: List[dict], products_map: dict) -> str:
+    if not order_items:
+        return ""
+
+    lines = ["", "🧾 <b>Tanlangan mahsulotlar:</b>"]
+    total_sum = 0.0
+    for item in order_items:
+        product = products_map.get(item["product_id"])
+        name = product.name if product else "Noma'lum"
+        line_total = item["total_price"]
+        total_sum += line_total
+        lines.append(
+            f"• {name}: {item['quantity']:.0f} × {format_number(item['price'])} = {format_number(line_total)} UZS"
+        )
+    lines.append(f"💰 <b>Jami: {format_number(total_sum)} UZS</b>")
+    return "\n".join(lines)
 
 
 # ─── Step 1: Select user ──────────────────────────────────────────────────────
@@ -164,7 +182,7 @@ async def add_product_to_order(callback: CallbackQuery, state: FSMContext, sessi
         
         await callback.message.answer(
             f"📝 <b>{product.name} - O'ZGARTIRILSIN</b>\n\n"
-            f"🔍 Joriy: {existing_item['quantity']:.0f} {product.unit} × {existing_item['price']:.0f} UZS\n\n"
+            f"🔍 Joriy: {existing_item['quantity']:.0f} × {format_number(existing_item['price'])} UZS\n\n"
             f"📦 Yangi miqdorni kiriting ({product.unit}):",
             parse_mode="HTML",
             reply_markup=cancel_keyboard(),
@@ -187,22 +205,40 @@ async def add_product_to_order(callback: CallbackQuery, state: FSMContext, sessi
 @router.callback_query(OrderStates.selecting_category, F.data.startswith("select_category:"))
 async def select_category(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     category_id = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    selected_user_id = data.get("selected_user_id")
+    if not selected_user_id:
+        await callback.answer("❌ Mijoz tanlanmagan.", show_alert=True)
+        return
+
+    user_service = UserService(session)
+    user = await user_service.get_by_id(selected_user_id)
+    if not user:
+        await callback.answer("❌ Foydalanuvchi topilmadi.", show_alert=True)
+        return
+
+    order_items: List[dict] = data.get("order_items", [])
+
     await state.update_data(selected_category_id=category_id)
     await state.set_state(OrderStates.selecting_product)
     prod_service = ProductService(session)
     categories = await prod_service.get_all_categories()
     products = await prod_service.get_by_category(category_id)
+    products_map = await _get_products_map(session)
+    summary_text = _build_selection_summary(order_items, products_map)
 
     if not products:
         await callback.message.edit_text("❌ Ushbu kategoriyada mahsulot topilmadi.")
         return
 
     await callback.message.edit_text(
-        "📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
+        f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):"
+        f"{summary_text}",
         parse_mode="HTML",
         reply_markup=products_select_keyboard(
             products,
-            [],
+            [item["product_id"] for item in order_items],
             categories=categories,
             active_category_id=category_id,
             category_callback_prefix="select_category",
@@ -230,15 +266,19 @@ async def switch_order_category(callback: CallbackQuery, state: FSMContext, sess
     prod_service = ProductService(session)
     categories = await prod_service.get_all_categories()
     products = await prod_service.get_by_category(category_id)
+    order_items: List[dict] = data.get("order_items", [])
+    products_map = await _get_products_map(session)
+    summary_text = _build_selection_summary(order_items, products_map)
 
     await state.update_data(selected_category_id=category_id)
     await callback.message.edit_text(
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
-        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):"
+        f"{summary_text}",
         parse_mode="HTML",
         reply_markup=products_select_keyboard(
             products,
-            data.get("selected_product_ids", []),
+            [item["product_id"] for item in order_items],
             categories=categories,
             active_category_id=category_id,
             category_callback_prefix="select_category",
@@ -353,12 +393,18 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
     else:
         products = await prod_service.get_all()
     selected_ids = [item["product_id"] for item in order_items]
+    products_map = await _get_products_map(session)
+    summary_text = _build_selection_summary(order_items, products_map)
+    user = await UserService(session).get_by_id(data["selected_user_id"])
+    customer_name = user.full_name if user else "Noma'lum"
 
-    from utils import format_number
     await message.answer(
+        f"👤 Mijoz: <b>{customer_name}</b>\n\n"
         f"{action_text}\n"
         f"💰 {quantity:.0f} × {format_number(price)} = {format_number(total_price)} UZS\n\n"
-        f"Yana mahsulot qo'shing yoki «Tasdiqlash» ni bosing:",
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):"
+        f"{summary_text}",
+        parse_mode="HTML",
         reply_markup=products_select_keyboard(
             products,
             selected_ids,

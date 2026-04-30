@@ -24,6 +24,7 @@ class OrderStates(StatesGroup):
 
 class ProductStates(StatesGroup):
     entering_name = State()
+    selecting_category = State()
     entering_unit = State()
     editing_name = State()
     editing_unit = State()

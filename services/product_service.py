@@ -35,12 +35,12 @@ class ProductService:
         )
         return result.scalar_one_or_none()
 
-    async def create(self, name: str, unit: str) -> Product:
-        product = Product(name=name, unit=unit)
+    async def create(self, name: str, unit: str, category_id: Optional[int] = None) -> Product:
+        product = Product(name=name, unit=unit, category_id=category_id)
         self.session.add(product)
         await self.session.commit()
         await self.session.refresh(product)
-        logger.info(f"Created product name={name} unit={unit}")
+        logger.info(f"Created product name={name} unit={unit} category_id={category_id}")
         return product
 
     async def update(self, product_id: int, name: str, unit: str) -> Optional[Product]:
