@@ -200,7 +200,14 @@ async def select_category(callback: CallbackQuery, state: FSMContext, session: A
     await callback.message.edit_text(
         "📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(products, [], back_callback="back_to_category_select"),
+        reply_markup=products_select_keyboard(
+            products,
+            [],
+            categories=categories,
+            active_category_id=category_id,
+            category_callback_prefix="select_category",
+            back_callback="back_to_category_select",
+        ),
     )
     await callback.answer()
 
@@ -229,7 +236,14 @@ async def switch_order_category(callback: CallbackQuery, state: FSMContext, sess
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
         f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(products, data.get("selected_product_ids", []), back_callback="back_to_category_select"),
+        reply_markup=products_select_keyboard(
+            products,
+            data.get("selected_product_ids", []),
+            categories=categories,
+            active_category_id=category_id,
+            category_callback_prefix="select_category",
+            back_callback="back_to_category_select",
+        ),
     )
     await callback.answer()
 
@@ -332,7 +346,12 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
     await state.set_state(OrderStates.selecting_product)
 
     prod_service = ProductService(session)
-    products = await prod_service.get_all()
+    categories = await prod_service.get_all_categories()
+    selected_category_id = data.get("selected_category_id")
+    if selected_category_id:
+        products = await prod_service.get_by_category(selected_category_id)
+    else:
+        products = await prod_service.get_all()
     selected_ids = [item["product_id"] for item in order_items]
 
     from utils import format_number
@@ -340,7 +359,14 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
         f"{action_text}\n"
         f"💰 {quantity:.0f} × {format_number(price)} = {format_number(total_price)} UZS\n\n"
         f"Yana mahsulot qo'shing yoki «Tasdiqlash» ni bosing:",
-        reply_markup=products_select_keyboard(products, selected_ids),
+        reply_markup=products_select_keyboard(
+            products,
+            selected_ids,
+            categories=categories,
+            active_category_id=selected_category_id,
+            category_callback_prefix="select_category",
+            back_callback="back_to_category_select",
+        ),
     )
 
 
@@ -443,12 +469,24 @@ async def edit_order(callback: CallbackQuery, state: FSMContext, session: AsyncS
     selected_ids = [item["product_id"] for item in order_items]
 
     prod_service = ProductService(session)
-    products = await prod_service.get_all()
+    categories = await prod_service.get_all_categories()
+    selected_category_id = data.get("selected_category_id")
+    if selected_category_id:
+        products = await prod_service.get_by_category(selected_category_id)
+    else:
+        products = await prod_service.get_all()
 
     await callback.message.edit_text(
         "✏️ <b>Mahsulotlarni tahrirlash</b>\n\nMahsulotni qayta tanlang:",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(products, selected_ids),
+        reply_markup=products_select_keyboard(
+            products,
+            selected_ids,
+            categories=categories,
+            active_category_id=selected_category_id,
+            category_callback_prefix="select_category",
+            back_callback="back_to_category_select",
+        ),
     )
     await callback.answer()
 

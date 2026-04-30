@@ -219,6 +219,9 @@ def manager_order_detail_keyboard(order_id: int, status: str) -> InlineKeyboardM
     builder.row(
         InlineKeyboardButton(text="📋 Buyurtmalarim", callback_data="manager_orders_list")
     )
+    builder.row(
+        InlineKeyboardButton(text="🏠 Asosiy sahifa", callback_data="back_to_main_menu")
+    )
     return builder.as_markup()
 
 

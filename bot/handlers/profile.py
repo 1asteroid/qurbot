@@ -4,7 +4,6 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import settings
 from bot.states import ProfileEditStates
 from bot.keyboards import main_menu_keyboard, remove_keyboard, phone_keyboard, order_receipt_keyboard
 from services import UserService, OrderService
@@ -18,13 +17,12 @@ router = Router()
 
 def _profile_keyboard(user):
     builder = InlineKeyboardBuilder()
-    if not settings.is_permanent_manager(user.telegram_id):
-        builder.row(
-            InlineKeyboardButton(text="✏️ Ism/Familiya", callback_data="update_full_name")
-        )
-        builder.row(
-            InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
-        )
+    builder.row(
+        InlineKeyboardButton(text="✏️ Ism/Familiya", callback_data="update_full_name")
+    )
+    builder.row(
+        InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
+    )
     if user.is_manager:
         builder.row(
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
@@ -72,9 +70,6 @@ async def start_update_full_name(callback: CallbackQuery, state: FSMContext, ses
     if not user:
         await callback.answer("❌ Foydalanuvchi topilmadi.", show_alert=True)
         return
-    if settings.is_permanent_manager(user.telegram_id):
-        await callback.answer("🔒 Sizning profilingizni tahrirlab bo'lmaydi.", show_alert=True)
-        return
 
     await state.set_state(ProfileEditStates.editing_full_name)
     await callback.message.answer("✏️ Yangi ism/familiyangizni kiriting:")
@@ -119,9 +114,6 @@ async def start_update_phone(callback: CallbackQuery, state: FSMContext, session
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if not user:
         await callback.answer("❌ Foydalanuvchi topilmadi.", show_alert=True)
-        return
-    if settings.is_permanent_manager(user.telegram_id):
-        await callback.answer("🔒 Sizning profilingizni tahrirlab bo'lmaydi.", show_alert=True)
         return
 
     await state.set_state(ProfileEditStates.editing_phone)
@@ -295,6 +287,10 @@ async def show_order_receipt(callback: CallbackQuery, session: AsyncSession, bot
     # Tekshirish: Buyurtma foydalanuvchining bo'lsa
     if order.user.telegram_id != callback.from_user.id:
         await callback.answer("❌ Bu buyurtma sizning emas.", show_alert=True)
+        return
+
+    if order.status != "pending":
+        await callback.answer("ℹ️ Bu buyurtma allaqachon tasdiqlangan yoki holati o'zgargan.", show_alert=True)
         return
     
     receipt_text = build_receipt(order)
