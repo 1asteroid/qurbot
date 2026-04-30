@@ -34,7 +34,7 @@ def _build_selection_summary(order_items: List[dict], products_map: dict) -> str
     if not order_items:
         return ""
 
-    lines = ["", "🧾 <b>Tanlangan mahsulotlar:</b>"]
+    lines = ["🧾 <b>Tanlangan mahsulotlar:</b>"]
     total_sum = 0.0
     for item in order_items:
         product = products_map.get(item["product_id"])
@@ -233,8 +233,8 @@ async def select_category(callback: CallbackQuery, state: FSMContext, session: A
 
     await callback.message.edit_text(
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
-        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):"
-        f"{summary_text}",
+        f"{summary_text}\n\n"
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
         reply_markup=products_select_keyboard(
             products,
@@ -273,8 +273,8 @@ async def switch_order_category(callback: CallbackQuery, state: FSMContext, sess
     await state.update_data(selected_category_id=category_id)
     await callback.message.edit_text(
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
-        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):"
-        f"{summary_text}",
+        f"{summary_text}\n\n"
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
         reply_markup=products_select_keyboard(
             products,
@@ -402,8 +402,8 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
         f"👤 Mijoz: <b>{customer_name}</b>\n\n"
         f"{action_text}\n"
         f"💰 {quantity:.0f} × {format_number(price)} = {format_number(total_price)} UZS\n\n"
-        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):"
-        f"{summary_text}",
+        f"{summary_text}\n\n"
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
         reply_markup=products_select_keyboard(
             products,

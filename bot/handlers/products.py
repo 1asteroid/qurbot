@@ -296,9 +296,11 @@ async def execute_delete_product(callback: CallbackQuery, session: AsyncSession)
     else:
         await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)
 
-    products = await service.get_all()
+    categories = await service.get_all_categories()
+    active_category_id = categories[0].id if categories else None
+    products = await service.get_by_category(active_category_id) if active_category_id else []
     await callback.message.edit_text(
         f"📦 <b>Mahsulotlar ro'yxati</b> ({len(products)} ta)",
         parse_mode="HTML",
-        reply_markup=products_list_keyboard(products),
+        reply_markup=products_list_keyboard(products, categories=categories, active_category_id=active_category_id),
     )
