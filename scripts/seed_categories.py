@@ -57,6 +57,29 @@ def main():
     engine = create_engine(sync_url, connect_args=connect_args)
 
     with engine.begin() as conn:
+        # Ensure `accepted_at` exists on orders to avoid runtime errors (safety for running on Heroku)
+        try:
+            if sync_url.startswith("sqlite:"):
+                rows = conn.execute(text("PRAGMA table_info(orders);")).fetchall()
+                cols = [r[1] for r in rows]
+                if "accepted_at" not in cols:
+                    logger.info("Adding missing 'accepted_at' column to orders table before seeding")
+                    conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at DATETIME;"))
+            else:
+                # For other DBs, try a safe add (Postgres supports IF NOT EXISTS)
+                try:
+                    conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;"))
+                except Exception:
+                    # Fallback: check information_schema and add if required
+                    info = conn.execute(text(
+                        "SELECT column_name FROM information_schema.columns WHERE table_name='orders' AND column_name='accepted_at';"
+                    )).fetchone()
+                    if not info:
+                        logger.info("Adding 'accepted_at' column to orders table (non-sqlite)")
+                        conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at TIMESTAMP;"))
+        except Exception as e:
+            logger.error(f"Could not ensure accepted_at column: {e}")
+            # continue — seed can proceed but may still error elsewhere
         # Create categories table if not exists (simple SQL)
         try:
             if sync_url.startswith("sqlite:"):
