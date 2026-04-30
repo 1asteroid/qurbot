@@ -133,9 +133,11 @@ def main():
                     # fallback: query id by name
                     cat_id = conn.execute(text("SELECT id FROM categories WHERE name = :name"), {"name": cat_name}).scalar()
 
+            # choose timestamp expression depending on DB
+            ts_expr = "now()" if not sync_url.startswith("sqlite:") else "datetime('now')"
             for prod_name, unit in products:
                 conn.execute(text(
-                    "INSERT INTO products (name, unit, category_id, created_at) VALUES (:name, :unit, :cat, now())"
+                    f"INSERT INTO products (name, unit, category_id, created_at) VALUES (:name, :unit, :cat, {ts_expr})"
                 ), {"name": prod_name, "unit": unit, "cat": cat_id})
 
     logger.info("Seeding complete.")
