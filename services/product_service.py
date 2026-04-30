@@ -2,7 +2,7 @@ import logging
 from typing import Optional, List
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import Product
+from database.models import Product, Category
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +16,18 @@ class ProductService:
             select(Product).order_by(desc(Product.created_at))
         )
         return list(result.scalars().all())
-    
-        async def get_all_categories(self) -> List:
-            from database.models import Category
-            result = await self.session.execute(select(Category))
-            return list(result.scalars().all())
-    
-        async def get_by_category(self, category_id: int) -> List[Product]:
-            result = await self.session.execute(select(Product).where(Product.category_id == category_id))
-            return list(result.scalars().all())
+
+    async def get_all_categories(self) -> List[Category]:
+        result = await self.session.execute(select(Category).order_by(Category.name))
+        return list(result.scalars().all())
+
+    async def get_by_category(self, category_id: int) -> List[Product]:
+        result = await self.session.execute(
+            select(Product)
+            .where(Product.category_id == category_id)
+            .order_by(desc(Product.created_at))
+        )
+        return list(result.scalars().all())
 
     async def get_by_id(self, product_id: int) -> Optional[Product]:
         result = await self.session.execute(

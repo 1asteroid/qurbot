@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.states import OrderStates
 from bot.keyboards import (
     users_keyboard,
+    category_switch_keyboard,
     products_select_keyboard,
     order_review_keyboard,
     main_menu_keyboard,
@@ -68,7 +69,6 @@ async def select_user(callback: CallbackQuery, state: FSMContext, session: Async
     await state.update_data(selected_user_id=user_id, order_items=[])
     # Show categories first for manager to pick
     await state.set_state(OrderStates.selecting_category)
-    from services import ProductService
     prod_service = ProductService(session)
     categories = await prod_service.get_all_categories()
 
@@ -80,7 +80,7 @@ async def select_user(callback: CallbackQuery, state: FSMContext, session: Async
         f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
         f"📂 <b>Mahsulot kategoriyasini tanlang</b>:",
         parse_mode="HTML",
-        reply_markup=categories_keyboard(categories),
+        reply_markup=category_switch_keyboard(categories, callback_prefix="select_category", back_callback="cancel_order"),
     )
     await callback.answer()
 
@@ -189,6 +189,7 @@ async def select_category(callback: CallbackQuery, state: FSMContext, session: A
     await state.update_data(selected_category_id=category_id)
     await state.set_state(OrderStates.selecting_product)
     prod_service = ProductService(session)
+    categories = await prod_service.get_all_categories()
     products = await prod_service.get_by_category(category_id)
 
     if not products:
@@ -198,7 +199,72 @@ async def select_category(callback: CallbackQuery, state: FSMContext, session: A
     await callback.message.edit_text(
         "📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",
-        reply_markup=products_select_keyboard(products, []),
+        reply_markup=products_select_keyboard(
+            products,
+            [],
+            categories=categories,
+            active_category_id=category_id,
+            category_callback_prefix="select_category",
+            back_callback="back_to_category_select",
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(OrderStates.selecting_product, F.data.startswith("select_category:"))
+async def switch_order_category(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    category_id = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    selected_user_id = data.get("selected_user_id")
+    if not selected_user_id:
+        await callback.answer("❌ Mijoz tanlanmagan.", show_alert=True)
+        return
+
+    user_service = UserService(session)
+    user = await user_service.get_by_id(selected_user_id)
+    if not user:
+        await callback.answer("❌ Foydalanuvchi topilmadi.", show_alert=True)
+        return
+
+    prod_service = ProductService(session)
+    categories = await prod_service.get_all_categories()
+    products = await prod_service.get_by_category(category_id)
+
+    await state.update_data(selected_category_id=category_id)
+    await callback.message.edit_text(
+        f"👤 Mijoz: <b>{user.full_name}</b>\n\n"
+        f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
+        parse_mode="HTML",
+        reply_markup=products_select_keyboard(
+            products,
+            data.get("selected_product_ids", []),
+            categories=categories,
+            active_category_id=category_id,
+            category_callback_prefix="select_category",
+            back_callback="back_to_category_select",
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_category_select")
+async def back_to_category_select(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    data = await state.get_data()
+    selected_user_id = data.get("selected_user_id")
+    if not selected_user_id:
+        await callback.answer("❌ Mijoz tanlanmagan.", show_alert=True)
+        return
+
+    user_service = UserService(session)
+    user = await user_service.get_by_id(selected_user_id)
+    prod_service = ProductService(session)
+    categories = await prod_service.get_all_categories()
+    await state.set_state(OrderStates.selecting_category)
+
+    await callback.message.edit_text(
+        f"👤 Mijoz: <b>{user.full_name}</b>\n\n📂 <b>Mahsulot kategoriyasini tanlang</b>:",
+        parse_mode="HTML",
+        reply_markup=category_switch_keyboard(categories, callback_prefix="select_category", active_category_id=data.get("selected_category_id"), back_callback="cancel_order"),
     )
     await callback.answer()
 

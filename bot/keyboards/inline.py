@@ -2,7 +2,7 @@ import math
 from typing import List, Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from database.models import User, Product, Order
+from database.models import User, Product, Order, Category
 
 
 # ─── User selection ───────────────────────────────────────────────────────────
@@ -28,12 +28,45 @@ def users_keyboard(users: List[User], show_search: bool = True) -> InlineKeyboar
 
 # ─── Product selection ────────────────────────────────────────────────────────
 
+def category_switch_keyboard(
+    categories: List[Category],
+    callback_prefix: str,
+    active_category_id: Optional[int] = None,
+    back_callback: Optional[str] = None,
+    back_text: str = "⬅️ Orqaga",
+) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for category in categories:
+        mark = "✅ " if active_category_id == category.id else ""
+        builder.button(
+            text=f"{mark}{category.name}",
+            callback_data=f"{callback_prefix}:{category.id}",
+        )
+    if categories:
+        builder.adjust(2)
+    if back_callback:
+        builder.row(InlineKeyboardButton(text=back_text, callback_data=back_callback))
+    return builder.as_markup()
+
+
 def products_select_keyboard(
     products: List[Product],
     selected_ids: Optional[List[int]] = None,
+    categories: Optional[List[Category]] = None,
+    active_category_id: Optional[int] = None,
+    category_callback_prefix: str = "select_category",
+    back_callback: Optional[str] = None,
 ) -> InlineKeyboardMarkup:
     selected_ids = selected_ids or []
     builder = InlineKeyboardBuilder()
+    if categories:
+        for category in categories:
+            mark = "✅ " if active_category_id == category.id else ""
+            builder.button(
+                text=f"{mark}{category.name}",
+                callback_data=f"{category_callback_prefix}:{category.id}",
+            )
+        builder.adjust(2)
     for product in products:
         mark = "✅ " if product.id in selected_ids else ""
         builder.row(
@@ -46,18 +79,8 @@ def products_select_keyboard(
         InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="finish_products"),
         InlineKeyboardButton(text="❌ Bekor", callback_data="cancel_order"),
     )
-    return builder.as_markup()
-
-
-def categories_keyboard(categories: List["Category"]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for c in categories:
-        builder.row(
-            InlineKeyboardButton(text=f"📁 {c.name}", callback_data=f"select_category:{c.id}")
-        )
-    builder.row(
-        InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_order")
-    )
+    if back_callback:
+        builder.row(InlineKeyboardButton(text="⬅️ Orqaga", callback_data=back_callback))
     return builder.as_markup()
 
 
@@ -73,8 +96,21 @@ def order_review_keyboard() -> InlineKeyboardMarkup:
 
 # ─── Product CRUD ─────────────────────────────────────────────────────────────
 
-def products_list_keyboard(products: List[Product]) -> InlineKeyboardMarkup:
+def products_list_keyboard(
+    products: List[Product],
+    categories: Optional[List[Category]] = None,
+    active_category_id: Optional[int] = None,
+    category_callback_prefix: str = "products_category",
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    if categories:
+        for category in categories:
+            mark = "✅ " if active_category_id == category.id else ""
+            builder.button(
+                text=f"{mark}{category.name}",
+                callback_data=f"{category_callback_prefix}:{category.id}",
+            )
+        builder.adjust(2)
     for product in products:
         builder.row(
             InlineKeyboardButton(
@@ -88,15 +124,13 @@ def products_list_keyboard(products: List[Product]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def product_detail_keyboard(product_id: int) -> InlineKeyboardMarkup:
+def product_detail_keyboard(product_id: int, back_callback: Optional[str] = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_product:{product_id}"),
         InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"delete_product:{product_id}"),
     )
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_products")
-    )
+    builder.row(InlineKeyboardButton(text="⬅️ Orqaga", callback_data=back_callback or "back_to_products"))
     return builder.as_markup()
 
 

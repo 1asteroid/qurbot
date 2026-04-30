@@ -11,6 +11,7 @@ from bot.keyboards import (
     unit_keyboard,
     confirm_delete_keyboard,
     main_menu_keyboard,
+    category_switch_keyboard,
 )
 from services import ProductService, UserService
 
@@ -37,27 +38,50 @@ async def show_products(message: Message, session: AsyncSession, is_manager: boo
         return
 
     service = ProductService(session)
-    products = await service.get_all()
+    categories = await service.get_all_categories()
+    active_category_id = categories[0].id if categories else None
+    products = await service.get_by_category(active_category_id) if active_category_id else []
 
     if not products:
         await message.answer(
             "📦 Mahsulotlar ro'yxati bo'sh.\n\nYangi mahsulot qo'shish uchun tugmani bosing.",
-            reply_markup=products_list_keyboard([]),
+            reply_markup=products_list_keyboard([], categories=categories, active_category_id=active_category_id),
         )
         return
 
     text = f"📦 <b>Mahsulotlar ro'yxati</b> ({len(products)} ta)\n\nMahsulotni tanlang:"
-    await message.answer(text, parse_mode="HTML", reply_markup=products_list_keyboard(products))
+    await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=products_list_keyboard(products, categories=categories, active_category_id=active_category_id),
+    )
 
 
 @router.callback_query(F.data == "back_to_products")
 async def back_to_products(callback: CallbackQuery, session: AsyncSession):
     service = ProductService(session)
-    products = await service.get_all()
+    categories = await service.get_all_categories()
+    active_category_id = categories[0].id if categories else None
+    products = await service.get_by_category(active_category_id) if active_category_id else []
     await callback.message.edit_text(
         f"📦 <b>Mahsulotlar ro'yxati</b> ({len(products)} ta)\n\nMahsulotni tanlang:",
         parse_mode="HTML",
-        reply_markup=products_list_keyboard(products),
+        reply_markup=products_list_keyboard(products, categories=categories, active_category_id=active_category_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("products_category:"))
+async def switch_product_category(callback: CallbackQuery, session: AsyncSession):
+    category_id = int(callback.data.split(":")[1])
+    service = ProductService(session)
+    categories = await service.get_all_categories()
+    products = await service.get_by_category(category_id)
+
+    await callback.message.edit_text(
+        f"📦 <b>Mahsulotlar ro'yxati</b> ({len(products)} ta)\n\nMahsulotni tanlang:",
+        parse_mode="HTML",
+        reply_markup=products_list_keyboard(products, categories=categories, active_category_id=category_id),
     )
     await callback.answer()
 
@@ -82,7 +106,7 @@ async def product_detail(callback: CallbackQuery, session: AsyncSession):
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=product_detail_keyboard(product.id),
+        reply_markup=product_detail_keyboard(product.id, back_callback=f"products_category:{product.category_id}" if product.category_id else "back_to_products"),
     )
     await callback.answer()
 
@@ -126,11 +150,13 @@ async def process_product_unit(callback: CallbackQuery, state: FSMContext, sessi
         parse_mode="HTML",
     )
     # refresh list
-    products = await service.get_all()
+    categories = await service.get_all_categories()
+    active_category_id = product.category_id if product.category_id else (categories[0].id if categories else None)
+    products = await service.get_by_category(active_category_id) if active_category_id else []
     await callback.message.answer(
         f"📦 <b>Mahsulotlar ro'yxati</b> ({len(products)} ta)",
         parse_mode="HTML",
-        reply_markup=products_list_keyboard(products),
+        reply_markup=products_list_keyboard(products, categories=categories, active_category_id=active_category_id),
     )
     await callback.answer()
 
@@ -139,11 +165,13 @@ async def process_product_unit(callback: CallbackQuery, state: FSMContext, sessi
 async def cancel_product(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     await state.clear()
     service = ProductService(session)
-    products = await service.get_all()
+    categories = await service.get_all_categories()
+    active_category_id = categories[0].id if categories else None
+    products = await service.get_by_category(active_category_id) if active_category_id else []
     await callback.message.edit_text(
         f"📦 <b>Mahsulotlar ro'yxati</b>",
         parse_mode="HTML",
-        reply_markup=products_list_keyboard(products),
+        reply_markup=products_list_keyboard(products, categories=categories, active_category_id=active_category_id),
     )
     await callback.answer("Bekor qilindi.")
 

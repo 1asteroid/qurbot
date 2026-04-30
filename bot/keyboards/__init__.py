@@ -7,6 +7,7 @@ from bot.keyboards.reply import (
 )
 from bot.keyboards.inline import (
     users_keyboard,
+    category_switch_keyboard,
     products_select_keyboard,
     order_review_keyboard,
     products_list_keyboard,
@@ -28,6 +29,7 @@ __all__ = [
     "remove_keyboard",
     "cancel_keyboard",
     "users_keyboard",
+    "category_switch_keyboard",
     "products_select_keyboard",
     "order_review_keyboard",
     "products_list_keyboard",

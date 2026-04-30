@@ -1,13 +1,17 @@
-"""Seed categories and products per specification.
+"""Fully reset the database and seed only categories/products.
 
-Run locally or on Heroku (heroku run python scripts/seed_categories.py).
-This script is idempotent: it will remove existing products and categories and recreate them.
+This script drops all existing tables, recreates the schema from the current models,
+and inserts only the requested categories and products.
+
+Use locally or on Heroku with care:
+    heroku run python scripts/seed_categories.py
 """
-import sys
 import logging
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError
+import sys
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 from config import settings
+from database.models import Base, Category, Product, now_tashkent
 
 logger = logging.getLogger("seed")
 logging.basicConfig(level=logging.INFO)
@@ -41,107 +45,48 @@ CATEGORIES = [
 def to_sync_url(db_url: str) -> str:
     if db_url.startswith("sqlite+aiosqlite://"):
         return db_url.replace("sqlite+aiosqlite://", "sqlite://", 1)
+    if db_url.startswith("postgres://"):
+        return db_url.replace("postgres://", "postgresql://", 1)
     return db_url
 
 
-def main():
+def main() -> None:
     db_url = settings.DATABASE_URL
     if not db_url:
         logger.error("DATABASE_URL not set")
         sys.exit(1)
 
     sync_url = to_sync_url(db_url)
-    logger.info(f"Connecting to DB: {sync_url}")
+    logger.info("Connecting to DB: %s", sync_url)
 
     connect_args = {"check_same_thread": False} if sync_url.startswith("sqlite:") else {}
     engine = create_engine(sync_url, connect_args=connect_args)
 
-    with engine.begin() as conn:
-        # Ensure `accepted_at` exists on orders to avoid runtime errors (safety for running on Heroku)
-        try:
-            if sync_url.startswith("sqlite:"):
-                rows = conn.execute(text("PRAGMA table_info(orders);")).fetchall()
-                cols = [r[1] for r in rows]
-                if "accepted_at" not in cols:
-                    logger.info("Adding missing 'accepted_at' column to orders table before seeding")
-                    conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at DATETIME;"))
-            else:
-                # For other DBs, try a safe add (Postgres supports IF NOT EXISTS)
-                try:
-                    conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;"))
-                except Exception:
-                    # Fallback: check information_schema and add if required
-                    info = conn.execute(text(
-                        "SELECT column_name FROM information_schema.columns WHERE table_name='orders' AND column_name='accepted_at';"
-                    )).fetchone()
-                    if not info:
-                        logger.info("Adding 'accepted_at' column to orders table (non-sqlite)")
-                        conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at TIMESTAMP;"))
-        except Exception as e:
-            logger.error(f"Could not ensure accepted_at column: {e}")
-            # continue — seed can proceed but may still error elsewhere
-        # Create categories table if not exists (simple SQL)
-        try:
-            if sync_url.startswith("sqlite:"):
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at DATETIME);"
-                ))
-                # Add category_id column to products if missing
-                cols = [r[1] for r in conn.execute(text("PRAGMA table_info(products);")).fetchall()]
-                if "category_id" not in cols:
-                    logger.info("Adding category_id column to products table")
-                    conn.execute(text("ALTER TABLE products ADD COLUMN category_id INTEGER;"))
-            else:
-                # Postgres / other
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP);")
+    logger.warning("Dropping all tables and recreating schema from models")
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    with Session(engine) as session:
+        logger.info("Seeding categories and products")
+        for category_name, products in CATEGORIES:
+            category = Category(name=category_name, created_at=now_tashkent())
+            session.add(category)
+            session.flush()
+
+            for product_name, unit in products:
+                session.add(
+                    Product(
+                        name=product_name,
+                        unit=unit,
+                        category_id=category.id,
+                        created_at=now_tashkent(),
+                    )
                 )
-                # Add column if not exists
-                try:
-                    conn.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER;"))
-                except Exception:
-                    # Some DB flavors don't support IF NOT EXISTS for ALTER
-                    pass
-        except OperationalError as e:
-            logger.error(f"Schema change error: {e}")
-            sys.exit(1)
 
-        # Remove existing products and categories (as requested)
-        logger.info("Deleting existing products and categories (if any)")
-        try:
-            conn.execute(text("DELETE FROM products;"))
-        except Exception:
-            pass
-        try:
-            conn.execute(text("DELETE FROM categories;"))
-        except Exception:
-            pass
+        session.commit()
 
-        # Insert categories and products
-        logger.info("Inserting categories and products")
-        for cat_name, products in CATEGORIES:
-            res = conn.execute(text("INSERT INTO categories (name, created_at) VALUES (:name, datetime('now'))"), {"name": cat_name})
-            # get last inserted id (sqlite)
-            if sync_url.startswith("sqlite:"):
-                cat_id = conn.execute(text("SELECT last_insert_rowid();")).scalar()
-            else:
-                # For Postgres return id
-                cat_id = None
-                try:
-                    cat_id = res.lastrowid
-                except Exception:
-                    # fallback: query id by name
-                    cat_id = conn.execute(text("SELECT id FROM categories WHERE name = :name"), {"name": cat_name}).scalar()
-
-            # choose timestamp expression depending on DB
-            ts_expr = "now()" if not sync_url.startswith("sqlite:") else "datetime('now')"
-            for prod_name, unit in products:
-                conn.execute(text(
-                    f"INSERT INTO products (name, unit, category_id, created_at) VALUES (:name, :unit, :cat, {ts_expr})"
-                ), {"name": prod_name, "unit": unit, "cat": cat_id})
-
-    logger.info("Seeding complete.")
+    logger.info("Database reset and seed complete.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
