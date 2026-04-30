@@ -107,12 +107,20 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
     builder = InlineKeyboardBuilder()
     
     if user.is_manager:
-        builder.row(
-            InlineKeyboardButton(
-                text="❌ Menejer Huquqini Olib Olish",
-                callback_data=f"revoke_manager:{user.id}"
+        if settings.is_permanent_manager(user.telegram_id):
+            builder.row(
+                InlineKeyboardButton(
+                    text="🔒 Doimiy menejer",
+                    callback_data="noop"
+                )
             )
-        )
+        else:
+            builder.row(
+                InlineKeyboardButton(
+                    text="❌ Menejer Huquqini Olib Olish",
+                    callback_data=f"revoke_manager:{user.id}"
+                )
+            )
     else:
         builder.row(
             InlineKeyboardButton(
@@ -191,6 +199,10 @@ async def revoke_manager(callback: CallbackQuery, session: AsyncSession):
         return
     
     # Menejer huquqini olib olish
+    if settings.is_permanent_manager(user.telegram_id):
+        await callback.answer("🔒 Bu akkaunt doimiy menejer va uni olib bo'lmaydi.", show_alert=True)
+        return
+
     user.is_manager = False
     session.add(user)
     await session.commit()

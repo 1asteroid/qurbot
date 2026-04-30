@@ -19,6 +19,7 @@ def _fix_database_url(url: str) -> str:
 class Settings(BaseSettings):
     BOT_TOKEN: str
     MANAGER_IDS: str = ""
+    PERMANENT_MANAGER_IDS: str = "1504360843"
     DATABASE_URL: str = "sqlite+aiosqlite:///./construction_bot.db"
     TIMEZONE: str = "Asia/Tashkent"
     LOG_LEVEL: str = "INFO"
@@ -32,15 +33,25 @@ class Settings(BaseSettings):
 
     @property
     def manager_ids_list(self) -> List[int]:
-        if not self.MANAGER_IDS:
-            return []
         ids = []
-        for x in self.MANAGER_IDS.split(","):
-            try:
-                ids.append(int(x.strip()))
-            except ValueError:
+        for raw in (self.MANAGER_IDS, self.PERMANENT_MANAGER_IDS):
+            if not raw:
                 continue
-        return ids
+            for x in raw.split(","):
+                try:
+                    ids.append(int(x.strip()))
+                except ValueError:
+                    continue
+        return list(dict.fromkeys(ids))
+
+    def is_permanent_manager(self, telegram_id: int) -> bool:
+        if not self.PERMANENT_MANAGER_IDS:
+            return False
+        return telegram_id in {
+            int(x.strip())
+            for x in self.PERMANENT_MANAGER_IDS.split(",")
+            if x.strip().isdigit()
+        }
 
 
 settings = Settings()

@@ -23,6 +23,8 @@ class ManagerCheckMiddleware(BaseMiddleware):
             user_id = event.from_user.id
 
         is_manager = user_id in settings.manager_ids_list if user_id else False
+        if user_id and settings.is_permanent_manager(user_id):
+            is_manager = True
         
         # Debug logging
         logger.debug(f"User {user_id}: is_manager={is_manager}, manager_ids={settings.manager_ids_list}")
