@@ -8,8 +8,8 @@ Use locally or on Heroku with care:
 """
 import logging
 import sys
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from config import settings
 from database.models import Base, Category, Product, now_tashkent
 
@@ -43,14 +43,12 @@ CATEGORIES = [
 
 
 def to_sync_url(db_url: str) -> str:
-    if db_url.startswith("sqlite+aiosqlite://"):
-        return db_url.replace("sqlite+aiosqlite://", "sqlite://", 1)
-    if db_url.startswith("postgres://"):
-        return db_url.replace("postgres://", "postgresql://", 1)
-    return db_url
+    return db_url.replace("postgres://", "postgresql+asyncpg://", 1).replace(
+        "postgresql://", "postgresql+asyncpg://", 1
+    )
 
 
-def main() -> None:
+async def main() -> None:
     db_url = settings.DATABASE_URL
     if not db_url:
         logger.error("DATABASE_URL not set")
@@ -59,19 +57,21 @@ def main() -> None:
     sync_url = to_sync_url(db_url)
     logger.info("Connecting to DB: %s", sync_url)
 
-    connect_args = {"check_same_thread": False} if sync_url.startswith("sqlite:") else {}
-    engine = create_engine(sync_url, connect_args=connect_args)
+    engine = create_async_engine(sync_url, echo=False, pool_pre_ping=True)
 
     logger.warning("Dropping all tables and recreating schema from models")
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
 
-    with Session(engine) as session:
+    SessionFactory = async_sessionmaker(bind=engine, expire_on_commit=False)
+
+    async with SessionFactory() as session:
         logger.info("Seeding categories and products")
         for category_name, products in CATEGORIES:
             category = Category(name=category_name, created_at=now_tashkent())
             session.add(category)
-            session.flush()
+            await session.flush()
 
             for product_name, unit in products:
                 session.add(
@@ -83,10 +83,10 @@ def main() -> None:
                     )
                 )
 
-        session.commit()
+        await session.commit()
 
     logger.info("Database reset and seed complete.")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

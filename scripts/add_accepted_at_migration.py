@@ -8,36 +8,39 @@ The script is idempotent: it checks for existence and exits if column already pr
 """
 import sys
 import logging
-from sqlalchemy import create_engine, text
+import asyncio
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 from config import settings
 
 logger = logging.getLogger("migration")
 logging.basicConfig(level=logging.INFO)
 
 
-def main():
+def to_async_url(db_url: str) -> str:
+    return db_url.replace("postgres://", "postgresql+asyncpg://", 1).replace(
+        "postgresql://", "postgresql+asyncpg://", 1
+    )
+
+
+async def main():
     db_url = settings.DATABASE_URL
     if not db_url:
         logger.error("DATABASE_URL is not set in config.settings")
         sys.exit(1)
 
-    # Support common async sqlite URL used in this project (sqlite+aiosqlite:///...) by
-    # converting to sync sqlite URL for raw ALTER execution.
-    if db_url.startswith("sqlite+aiosqlite://"):
-        sync_url = db_url.replace("sqlite+aiosqlite://", "sqlite://", 1)
-    else:
-        sync_url = db_url
+    sync_url = to_async_url(db_url)
 
     logger.info(f"Connecting to database: {sync_url}")
 
-    engine = create_engine(sync_url, connect_args={"check_same_thread": False} if sync_url.startswith("sqlite:") else {})
+    engine = create_async_engine(sync_url, echo=False, pool_pre_ping=True)
 
-    with engine.connect() as conn:
+    async with engine.begin() as conn:
         # Only handle SQLite automatically. For other DBs, show instructions.
         if sync_url.startswith("sqlite:"):
             logger.info("Detected SQLite. Checking table schema...")
             try:
-                rows = conn.execute(text("PRAGMA table_info(orders);")).fetchall()
+                rows = (await conn.execute(text("PRAGMA table_info(orders);"))).fetchall()
             except Exception as e:
                 logger.error(f"Error reading table info: {e}")
                 sys.exit(1)
@@ -49,18 +52,27 @@ def main():
 
             logger.info("Adding column 'accepted_at' to 'orders' table...")
             try:
-                conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at DATETIME;"))
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at DATETIME;"))
                 logger.info("Column added successfully.")
             except Exception as e:
                 logger.error(f"Failed to add column: {e}")
                 sys.exit(1)
         else:
-            logger.error("Automatic migration only implemented for SQLite.\n"
-                         "For other databases run an ALTER TABLE to add `accepted_at` column, e.g.:\n"
-                         "  ALTER TABLE orders ADD COLUMN accepted_at TIMESTAMP;\n"
-                         "Then ensure your app restarts.")
-            sys.exit(1)
+            try:
+                result = await conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='orders' AND column_name='accepted_at';"
+                ))
+                if result.fetchone():
+                    logger.info("Column 'accepted_at' already exists. Nothing to do.")
+                    return
+
+                logger.info("Adding column 'accepted_at' to 'orders' table...")
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN accepted_at TIMESTAMP;"))
+                logger.info("Column added successfully.")
+            except Exception as e:
+                logger.error(f"Failed to add column on PostgreSQL: {e}")
+                sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
