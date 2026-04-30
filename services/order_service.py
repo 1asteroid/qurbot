@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, desc, func, extract
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from database.models import Order, OrderItem, Product, User
+from database.models import Order, OrderItem, Product, User, now_tashkent
 import pytz
 from config import settings
 
@@ -23,7 +23,7 @@ class OrderService:
         manager_id: Optional[int] = None,
     ) -> Order:
         total_sum = sum(item["total_price"] for item in items)
-        order = Order(user_id=user_id, manager_id=manager_id, total_sum=total_sum, status="confirmed")
+        order = Order(user_id=user_id, manager_id=manager_id, total_sum=total_sum, status="pending")
         self.session.add(order)
         await self.session.flush()  # get order.id
 
@@ -77,7 +77,7 @@ class OrderService:
         result = await self.session.execute(
             select(func.count(Order.id), func.coalesce(func.sum(Order.total_sum), 0))
             .where(Order.created_at >= today_start)
-            .where(Order.status == "confirmed")
+            .where(Order.status == "accepted")
         )
         row = result.one()
         return {"count": row[0], "total": row[1]}
@@ -87,7 +87,7 @@ class OrderService:
             select(func.count(Order.id), func.coalesce(func.sum(Order.total_sum), 0))
             .where(extract("year", Order.created_at) == year)
             .where(extract("month", Order.created_at) == month)
-            .where(Order.status == "confirmed")
+            .where(Order.status == "accepted")
         )
         row = result.one()
         return {"count": row[0], "total": row[1]}
@@ -96,7 +96,7 @@ class OrderService:
         result = await self.session.execute(
             select(func.count(Order.id), func.coalesce(func.sum(Order.total_sum), 0))
             .where(extract("year", Order.created_at) == year)
-            .where(Order.status == "confirmed")
+            .where(Order.status == "accepted")
         )
         row = result.one()
         return {"count": row[0], "total": row[1]}
@@ -111,7 +111,7 @@ class OrderService:
             )
             .join(OrderItem, OrderItem.product_id == Product.id)
             .join(Order, Order.id == OrderItem.order_id)
-            .where(Order.status == "confirmed")
+            .where(Order.status == "accepted")
             .group_by(Product.id, Product.name, Product.unit)
             .order_by(desc("total_revenue"))
             .limit(limit)
@@ -126,3 +126,58 @@ class OrderService:
             }
             for row in rows
         ]
+
+    async def get_orders_by_user(self, user_id: int, limit: int = 10, offset: int = 0) -> tuple[List[Order], int]:
+        """Get orders for a specific user with pagination"""
+        count_result = await self.session.execute(
+            select(func.count(Order.id)).where(Order.user_id == user_id)
+        )
+        total = count_result.scalar_one()
+
+        result = await self.session.execute(
+            select(Order)
+            .options(
+                selectinload(Order.user),
+                selectinload(Order.items).selectinload(OrderItem.product),
+            )
+            .where(Order.user_id == user_id)
+            .order_by(desc(Order.created_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        orders = list(result.scalars().all())
+        return orders, total
+
+    async def get_orders_for_period(self, start_date: datetime, end_date: datetime) -> tuple[List[Order], dict]:
+        """Get orders for a specific date range and stats"""
+        result = await self.session.execute(
+            select(Order)
+            .options(
+                selectinload(Order.user),
+                selectinload(Order.items).selectinload(OrderItem.product),
+            )
+            .where(Order.created_at >= start_date)
+            .where(Order.created_at <= end_date)
+            .where(Order.status == "accepted")
+            .order_by(desc(Order.created_at))
+        )
+        orders = list(result.scalars().all())
+        
+        total_sum = sum(o.total_sum for o in orders)
+        stats = {
+            "count": len(orders),
+            "total": total_sum,
+        }
+        return orders, stats
+
+    async def accept_order(self, order_id: int) -> Optional[Order]:
+        """Mark order as accepted"""
+        order = await self.get_order_with_details(order_id)
+        if order:
+            order.status = "accepted"
+            order.accepted_at = now_tashkent()
+            self.session.add(order)
+            await self.session.commit()
+            await self.session.refresh(order)
+            logger.info(f"Order {order_id} accepted at {order.accepted_at}")
+        return order

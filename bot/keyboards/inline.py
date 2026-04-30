@@ -99,6 +99,58 @@ def unit_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+# ─── Manager Orders ───────────────────────────────────────────────────────────
+
+def manager_orders_keyboard(orders: List[Order], page: int, total: int, per_page: int = 10) -> InlineKeyboardMarkup:
+    """Keyboard for manager's inline orders view with pagination"""
+    builder = InlineKeyboardBuilder()
+    
+    for order in orders:
+        # Format: Order #123 - Customer Name - Total UZS
+        from utils import format_number
+        text = f"🧾 #{order.id} - {order.user.full_name} ({format_number(order.total_sum)} UZS)"
+        builder.row(
+            InlineKeyboardButton(text=text, callback_data=f"manager_order_detail:{order.id}")
+        )
+    
+    # Pagination buttons
+    total_pages = math.ceil(total / per_page)
+    nav_buttons = []
+    
+    if page > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"manager_orders_page:{page - 1}")
+        )
+    
+    if page < total_pages:
+        nav_buttons.append(
+            InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"manager_orders_page:{page + 1}")
+        )
+    
+    if nav_buttons:
+        builder.row(*nav_buttons)
+    
+    # Show page info
+    builder.row(
+        InlineKeyboardButton(text=f"📄 Sahifa {page}/{total_pages}", callback_data="noop")
+    )
+    
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_main_menu")
+    )
+    
+    return builder.as_markup()
+
+
+def manager_order_detail_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    """Keyboard for viewing manager order details"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📋 Buyurtmalarim", callback_data="manager_orders_list")
+    )
+    return builder.as_markup()
+
+
 def confirm_delete_keyboard(product_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -145,5 +197,20 @@ def monitoring_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="🏆 Top mahsulotlar", callback_data="stats:top_products")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_main_menu")
+    )
+    return builder.as_markup()
+
+
+def monitoring_report_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard for monitoring reports with PDF download"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="💾 PDF yuklash", callback_data="download_report_pdf")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="stats:menu")
     )
     return builder.as_markup()

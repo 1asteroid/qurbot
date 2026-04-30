@@ -26,3 +26,4 @@ class ProductStates(StatesGroup):
 
 class MonitoringStates(StatesGroup):
     selecting_custom_month = State()
+    viewing_report = State()

@@ -300,7 +300,19 @@ async def show_order_receipt(callback: CallbackQuery, session: AsyncSession, bot
     
     receipt_text = build_receipt(order)
     
+    # Add status info
+    receipt_text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
+    if order.accepted_at:
+        receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+    
     builder = InlineKeyboardBuilder()
+    
+    # Show accept button only if order status is pending (not yet accepted)
+    if order.status == "pending":
+        builder.row(
+            InlineKeyboardButton(text="✅ Buyurtmani qabul qildim", callback_data=f"accept_order:{order.id}")
+        )
+    
     builder.row(
         InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order.id}")
     )
@@ -314,6 +326,73 @@ async def show_order_receipt(callback: CallbackQuery, session: AsyncSession, bot
         reply_markup=builder.as_markup()
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("accept_order:"))
+async def accept_order_handler(callback: CallbackQuery, session: AsyncSession, bot: Bot):
+    """Order qabul qilish"""
+    order_id = int(callback.data.split(":")[1])
+    
+    order_service = OrderService(session)
+    order = await order_service.get_order_with_details(order_id)
+    
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+    
+    # Tekshirish: Buyurtma foydalanuvchining bo'lsa
+    if order.user.telegram_id != callback.from_user.id:
+        await callback.answer("❌ Bu buyurtma sizning emas.", show_alert=True)
+        return
+    
+    # Accept the order
+    order = await order_service.accept_order(order_id)
+    
+    # Notify manager
+    if order.manager:
+        try:
+            manager_text = (
+                f"✅ <b>Buyurtma qabul qilindi!</b>\n\n"
+                f"📦 Buyurtma #: {order.id}\n"
+                f"👤 Mijoz: {order.user.full_name}\n"
+                f"📱 Tel: {order.user.phone}\n"
+                f"💰 Summa: {format_number(order.total_sum)} UZS\n"
+                f"✅ Qabul vaqti: {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+            )
+            
+            # Add items info
+            manager_text += "\n📋 <b>Buyurtma tarkibi:</b>\n"
+            for item in order.items:
+                manager_text += f"  • {item.product.name}: {item.quantity:.0f} {item.product.unit} × {format_number(item.price)} = {format_number(item.total_price)} UZS\n"
+            
+            await bot.send_message(
+                chat_id=order.manager.telegram_id,
+                text=manager_text,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Could not notify manager: {e}")
+    
+    # Show updated receipt
+    receipt_text = build_receipt(order)
+    receipt_text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
+    receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order.id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="my_orders")
+    )
+    
+    await callback.message.edit_text(
+        f"<pre>{receipt_text}</pre>",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer("✅ Buyurtma qabul qilindi!")
+
 
 
 @router.callback_query(F.data.startswith("download_receipt_pdf:"))

@@ -56,7 +56,8 @@ class Order(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     manager_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     total_sum: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="confirmed")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_tashkent, nullable=False)
 
     # Use string references for foreign_keys to avoid circular reference issues

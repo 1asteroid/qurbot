@@ -20,6 +20,9 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, 
     user = await service.get_by_telegram_id(message.from_user.id)
 
     if user:
+        # Clear state if user is already registered
+        await state.clear()
+        
         text = f"👋 Xush kelibsiz, <b>{user.full_name}</b>!\n"
         text += f"Siz allaqachon ro'yxatdan o'tgansiz.\n\n"
         

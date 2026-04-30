@@ -374,9 +374,20 @@ async def edit_order(callback: CallbackQuery, state: FSMContext, session: AsyncS
     await callback.answer()
 
 
+@router.message(OrderStates.reviewing_order, F.text == "❌ Bekor qilish")
+async def cancel_order_from_message(message: Message, state: FSMContext):
+    """Buyurtmani text button orqali bekor qilish"""
+    await state.clear()
+    await message.answer(
+        "❌ <b>Buyurtma bekor qilindi</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard()
+    )
+
+
 @router.callback_query(F.data == "cancel_order")
 async def cancel_order(callback: CallbackQuery, state: FSMContext):
-    """Buyurtmani bekor qilish - barcha states'dan"""
+    """Buyurtmani bekor qilish - barcha states'dan (inline orqali)"""
     await state.clear()
     
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
