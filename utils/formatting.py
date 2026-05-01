@@ -13,6 +13,17 @@ def format_phone(phone: str) -> str:
     return phone.strip()
 
 
+def _item_extra_label(item: OrderItem) -> str:
+    category_name = (item.product.category.name if item.product and item.product.category else "").strip().lower()
+    if not item.size:
+        return ""
+    if category_name == "travertin":
+        return f" | Rang: {item.size}"
+    if category_name == "tiya":
+        return f" | Razmer: {item.size}"
+    return f" | {item.size}"
+
+
 def build_receipt(order: Order) -> str:
     """Build a clean text receipt from an Order object."""
     lines = []
@@ -30,9 +41,7 @@ def build_receipt(order: Order) -> str:
         qty = f"{item.quantity:.0f}"
         price = format_number(item.price)
         total = format_number(item.total_price)
-        lines.append(f"{name:<18} {qty:<8} {price:<10} {total}")
-        if item.size:
-            lines.append(f"{'📏 Razmer:':<18} {item.size}")
+        lines.append(f"{name:<18} {qty:<8} {price:<10} {total}{_item_extra_label(item)}")
 
     lines.append("═" * 40)
     lines.append(f"💰 JAMI: {format_number(order.total_sum)} UZS")
@@ -55,9 +64,18 @@ def build_order_preview(items: List[dict], products_map: dict) -> str:
         price = item["price"]
         t = item["total_price"]
         size = item.get("size")
+        product_category = (product.category.name if product and getattr(product, "category", None) else "").strip().lower()
         total += t
         
-        size_text = f" | 📏 {size}" if size else ""
+        if size:
+            if product_category == "travertin":
+                size_text = f" | 🎨 {size}"
+            elif product_category == "tiya":
+                size_text = f" | 📏 {size}"
+            else:
+                size_text = f" | {size}"
+        else:
+            size_text = ""
         lines.append(
             f"{i}. <b>{name}</b>{size_text}\n"
             f"   {qty:.0f} × {format_number(price)} = {format_number(t)} UZS"

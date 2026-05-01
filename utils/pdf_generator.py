@@ -11,6 +11,17 @@ from config import settings
 
 TZ = pytz.timezone(settings.TIMEZONE)
 
+
+def _item_suffix(item) -> str:
+    category_name = (item.product.category.name if item.product and item.product.category else "").strip().lower()
+    if not item.size:
+        return ""
+    if category_name == "travertin":
+        return f" | Rang: {item.size}"
+    if category_name == "tiya":
+        return f" | Razmer: {item.size}"
+    return f" | {item.size}"
+
 # Font to support Cyrillic (if needed), using default for now
 def get_styles():
     styles = getSampleStyleSheet()
@@ -121,7 +132,7 @@ def generate_receipt_pdf(order) -> BytesIO:
     for i, item in enumerate(order.items, 1):
         table_data.append([
             str(i),
-            item.product.name[:18],
+            f"{item.product.name[:18]}{_item_suffix(item)}",
             item.product.unit,
             f"{item.quantity:.2f}",
             f"{item.price:,.0f}",

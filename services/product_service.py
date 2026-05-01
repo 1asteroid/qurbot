@@ -2,6 +2,7 @@ import logging
 from typing import Optional, List
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from database.models import Product, Category
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ class ProductService:
 
     async def get_all(self) -> List[Product]:
         result = await self.session.execute(
-            select(Product).order_by(desc(Product.created_at))
+            select(Product).options(selectinload(Product.category)).order_by(desc(Product.created_at))
         )
         return list(result.scalars().all())
 
@@ -24,6 +25,7 @@ class ProductService:
     async def get_by_category(self, category_id: int) -> List[Product]:
         result = await self.session.execute(
             select(Product)
+            .options(selectinload(Product.category))
             .where(Product.category_id == category_id)
             .order_by(desc(Product.created_at))
         )
@@ -31,7 +33,7 @@ class ProductService:
 
     async def get_by_id(self, product_id: int) -> Optional[Product]:
         result = await self.session.execute(
-            select(Product).where(Product.id == product_id)
+            select(Product).options(selectinload(Product.category)).where(Product.id == product_id)
         )
         return result.scalar_one_or_none()
 

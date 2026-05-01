@@ -48,7 +48,7 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.items).selectinload(OrderItem.product),
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
             )
             .where(Order.id == order_id)
         )
@@ -62,7 +62,7 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.items).selectinload(OrderItem.product),
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
             )
             .order_by(desc(Order.created_at))
             .offset((page - 1) * per_page)
@@ -139,7 +139,7 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.items).selectinload(OrderItem.product),
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
             )
             .where(Order.user_id == user_id)
             .order_by(desc(Order.created_at))
@@ -155,7 +155,7 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.items).selectinload(OrderItem.product),
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
             )
             .where(Order.created_at >= start_date)
             .where(Order.created_at <= end_date)
@@ -231,7 +231,7 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.items).selectinload(OrderItem.product),
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
             )
             .where(Order.user_id == user_id)
             .order_by(desc(Order.created_at))
