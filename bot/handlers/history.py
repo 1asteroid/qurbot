@@ -1,6 +1,6 @@
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.keyboards import (
@@ -130,12 +130,38 @@ async def download_order_pdf_history(callback: CallbackQuery, session: AsyncSess
         return
     
     pdf_buffer = generate_receipt_pdf(order)
-    pdf_buffer.seek(0)
-    
-    file_name = f"buyurtma_{order_id}.pdf"
+    pdf_file = BufferedInputFile(
+        pdf_buffer.getvalue(),
+        filename=f"buyurtma_{order_id}.pdf",
+    )
+
     await callback.message.answer_document(
-        document=pdf_buffer,
-        filename=file_name,
-        caption=f"📄 Buyurtma #{order_id} PDF"
+        document=pdf_file,
+        caption=f"📄 Buyurtma #{order_id} PDF",
+    )
+    await callback.answer("✅ PDF yuklandi!")
+
+
+@router.callback_query(F.data.startswith("history_user_pdf:"))
+async def download_user_orders_pdf_history(callback: CallbackQuery, session: AsyncSession, bot: Bot):
+    """Download all orders PDF for a specific user"""
+    user_id = int(callback.data.split(":")[1])
+    service = OrderService(session)
+
+    user_orders = await service.get_user_orders_summary(user_id)
+    if not user_orders:
+        await callback.answer("Ushbu user uchun buyurtma topilmadi.", show_alert=True)
+        return
+
+    user = user_orders[0]["order"].user
+    pdf_buffer = generate_user_orders_pdf(user, user_orders)
+    pdf_file = BufferedInputFile(
+        pdf_buffer.getvalue(),
+        filename=f"{user.full_name}_buyurtmalar.pdf",
+    )
+
+    await callback.message.answer_document(
+        document=pdf_file,
+        caption=f"📄 {user.full_name} buyurtmalari PDF",
     )
     await callback.answer("✅ PDF yuklandi!")

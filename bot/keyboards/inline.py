@@ -329,6 +329,9 @@ def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> Inlin
         )
     
     builder.row(
+        InlineKeyboardButton(text="📄 Barcha buyurtmalar PDF", callback_data=f"history_user_pdf:{user_id}")
+    )
+    builder.row(
         InlineKeyboardButton(text="⬅️ Orqaga", callback_data="history_users_list")
     )
     return builder.as_markup()
