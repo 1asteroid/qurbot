@@ -21,6 +21,9 @@ from bot.keyboards.inline import (
     manager_orders_keyboard,
     manager_order_detail_keyboard,
     monitoring_report_keyboard,
+    history_users_list_keyboard,
+    history_user_orders_keyboard,
+    history_order_detail_keyboard,
 )
 
 __all__ = [
@@ -44,4 +47,7 @@ __all__ = [
     "manager_orders_keyboard",
     "manager_order_detail_keyboard",
     "monitoring_report_keyboard",
+    "history_users_list_keyboard",
+    "history_user_orders_keyboard",
+    "history_order_detail_keyboard",
 ]

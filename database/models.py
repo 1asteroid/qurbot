@@ -102,6 +102,7 @@ class OrderItem(Base):
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     total_price: Mapped[float] = mapped_column(Float, nullable=False)
+    size: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     order: Mapped["Order"] = relationship("Order", back_populates="items", lazy="selectin")
     product: Mapped["Product"] = relationship("Product", back_populates="order_items", lazy="selectin")

@@ -31,6 +31,8 @@ def build_receipt(order: Order) -> str:
         price = format_number(item.price)
         total = format_number(item.total_price)
         lines.append(f"{name:<18} {qty:<8} {price:<10} {total}")
+        if item.size:
+            lines.append(f"{'📏 Razmer:':<18} {item.size}")
 
     lines.append("═" * 40)
     lines.append(f"💰 JAMI: {format_number(order.total_sum)} UZS")
@@ -52,9 +54,12 @@ def build_order_preview(items: List[dict], products_map: dict) -> str:
         qty = item["quantity"]
         price = item["price"]
         t = item["total_price"]
+        size = item.get("size")
         total += t
+        
+        size_text = f" | 📏 {size}" if size else ""
         lines.append(
-            f"{i}. <b>{name}</b>\n"
+            f"{i}. <b>{name}</b>{size_text}\n"
             f"   {qty:.0f} × {format_number(price)} = {format_number(t)} UZS"
         )
 

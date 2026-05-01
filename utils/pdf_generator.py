@@ -372,3 +372,182 @@ O'rtacha Buyurtma: {avg_order:,.0f} UZS"""
     doc.build(elements)
     buffer.seek(0)
     return buffer
+
+
+def generate_user_orders_pdf(user, user_orders_list) -> BytesIO:
+    """Generate PDF with all user's orders summary and details"""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.7*cm, bottomMargin=0.7*cm)
+    
+    styles, title_style, header_style = get_styles()
+    elements = []
+    
+    # Company header
+    company_header = Paragraph(
+        "«NOVASTONE» FIRMA<br/>"
+        "<font size='9'>Qurilish materiallari do'koni</font>",
+        ParagraphStyle(
+            'CompanyHeader',
+            parent=styles['Normal'],
+            fontSize=12,
+            fontName='Helvetica-Bold',
+            textColor=colors.HexColor('#1a1a1a'),
+            alignment=1,
+            spaceAfter=8,
+        )
+    )
+    elements.append(company_header)
+    elements.append(Spacer(1, 0.2*cm))
+    
+    # Title
+    title = Paragraph(
+        f"👤 MIJOZNING BUYURTMALARI",
+        ParagraphStyle(
+            'ReportTitle',
+            parent=styles['Normal'],
+            fontSize=12,
+            fontName='Helvetica-Bold',
+            textColor=colors.HexColor('#2196F3'),
+            alignment=1,
+            spaceAfter=4,
+        )
+    )
+    elements.append(title)
+    
+    # Customer info
+    report_date = datetime.now(TZ).strftime('%d.%m.%Y %H:%M')
+    customer_info_style = ParagraphStyle(
+        'CustomerInfo',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#333333'),
+        spaceAfter=2,
+    )
+    
+    customer_text = f"""<b>Mijoz:</b> {user.full_name}<br/>
+<b>Telefon:</b> {user.phone}<br/>
+<b>Ro'yxatdan o'tgan:</b> {user.created_at.strftime('%d.%m.%Y')}<br/>
+<b>Hisobot tayyorlandi:</b> {report_date}"""
+    
+    elements.append(Paragraph(customer_text, customer_info_style))
+    elements.append(Spacer(1, 0.3*cm))
+    
+    elements.append(Paragraph("_" * 80, header_style))
+    elements.append(Spacer(1, 0.2*cm))
+    
+    # Orders summary table
+    total_orders = len(user_orders_list)
+    total_sum = sum(order["total_sum"] for order in user_orders_list)
+    
+    orders_data = [
+        ["#", "Sana va vaqt", "Mahsulotlar", "Jami (UZS)"]
+    ]
+    
+    for idx, order_info in enumerate(user_orders_list, 1):
+        order = order_info["order"]
+        date_str = order.created_at.strftime('%d.%m.%Y %H:%M')
+        item_count = order_info["item_count"]
+        
+        orders_data.append([
+            str(idx),
+            date_str,
+            f"{item_count} ta",
+            f"{order.total_sum:,.0f}"
+        ])
+    
+    # Add total row
+    orders_data.append([
+        "",
+        "",
+        f"Jami: {total_orders} ta",
+        f"{total_sum:,.0f}"
+    ])
+    
+    orders_table = Table(orders_data, colWidths=[0.8*cm, 3.5*cm, 2.5*cm, 2.5*cm])
+    orders_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2196F3')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#bbdefb')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 9),
+        ('TOPPADDING', (0, -1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#fafafa')]),
+        ('FONTSIZE', (0, 1), (-1, -2), 8),
+    ]))
+    
+    elements.append(orders_table)
+    elements.append(Spacer(1, 0.3*cm))
+    
+    # Product-wise breakdown
+    product_data = {}
+    for order_info in user_orders_list:
+        order = order_info["order"]
+        for item in order.items:
+            if item.product.id not in product_data:
+                product_data[item.product.id] = {
+                    'name': item.product.name,
+                    'unit': item.product.unit,
+                    'quantity': 0,
+                    'total': 0
+                }
+            product_data[item.product.id]['quantity'] += item.quantity
+            product_data[item.product.id]['total'] += item.total_price
+    
+    if product_data:
+        elements.append(Paragraph("_" * 80, header_style))
+        elements.append(Spacer(1, 0.2*cm))
+        
+        elements.append(Paragraph(
+            "<b>Mahsulot bo'yicha Hisobot:</b>",
+            ParagraphStyle(
+                'SectionTitle',
+                parent=styles['Normal'],
+                fontSize=9,
+                fontName='Helvetica-Bold',
+                textColor=colors.HexColor('#333333'),
+                spaceAfter=4,
+            )
+        ))
+        
+        product_table_data = [
+            ["#", "Mahsulot", "Birligi", "Umumiy Miqdori", "Umumiy Summa (UZS)"]
+        ]
+        
+        for idx, (prod_id, prod_info) in enumerate(sorted(product_data.items(), key=lambda x: x[1]['total'], reverse=True), 1):
+            product_table_data.append([
+                str(idx),
+                prod_info['name'][:20],
+                prod_info['unit'],
+                f"{prod_info['quantity']:.2f}",
+                f"{prod_info['total']:,.0f}"
+            ])
+        
+        product_table = Table(product_table_data, colWidths=[0.6*cm, 3.2*cm, 1.2*cm, 1.8*cm, 2.2*cm])
+        product_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4CAF50')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('ALIGN', (4, 0), (4, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('TOPPADDING', (0, 0), (-1, 0), 4),
+            ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fafafa')]),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ]))
+        elements.append(product_table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer

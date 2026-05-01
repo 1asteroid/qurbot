@@ -288,3 +288,59 @@ def monitoring_report_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="⬅️ Orqaga", callback_data="stats:menu")
     )
     return builder.as_markup()
+
+
+# ─── Order History Grouped by Users ──────────────────────────────────────────
+
+def history_users_list_keyboard(users_data: List[dict]) -> InlineKeyboardMarkup:
+    """Keyboard for showing users with their order counts and totals"""
+    from utils import format_number
+    builder = InlineKeyboardBuilder()
+    
+    for user_info in users_data:
+        user = user_info["user"]
+        order_count = user_info["order_count"]
+        total_amount = user_info["total_amount"]
+        text = f"👤 {user.full_name} | {order_count} ta buyurtma | {format_number(total_amount)} UZS"
+        builder.row(
+            InlineKeyboardButton(text=text, callback_data=f"history_user:{user.id}")
+        )
+    
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_main_menu")
+    )
+    return builder.as_markup()
+
+
+def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> InlineKeyboardMarkup:
+    """Keyboard for showing specific user's orders"""
+    from utils import format_number
+    builder = InlineKeyboardBuilder()
+    
+    for order_info in user_orders:
+        order = order_info["order"]
+        item_count = order_info["item_count"]
+        created_at = order_info["created_at"]
+        total_sum = order_info["total_sum"]
+        date_str = created_at.strftime('%d.%m.%Y %H:%M')
+        text = f"📦 {date_str} | {item_count} ta mahsulot | {format_number(total_sum)} UZS"
+        builder.row(
+            InlineKeyboardButton(text=text, callback_data=f"history_order_detail:{order.id}")
+        )
+    
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="history_users_list")
+    )
+    return builder.as_markup()
+
+
+def history_order_detail_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    """Keyboard for showing order details in history with PDF option"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"history_order_pdf:{order_id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="history_users_list")
+    )
+    return builder.as_markup()

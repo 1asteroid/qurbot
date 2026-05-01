@@ -19,7 +19,7 @@ class OrderService:
     async def create_order(
         self,
         user_id: int,
-        items: List[dict],  # [{product_id, quantity, price, total_price}]
+        items: List[dict],  # [{product_id, quantity, price, total_price, size}]
         manager_id: Optional[int] = None,
     ) -> Order:
         total_sum = sum(item["total_price"] for item in items)
@@ -34,6 +34,7 @@ class OrderService:
                 quantity=item_data["quantity"],
                 price=item_data["price"],
                 total_price=item_data["total_price"],
+                size=item_data.get("size"),
             )
             self.session.add(item)
 
@@ -185,3 +186,64 @@ class OrderService:
         await self.session.refresh(order)
         logger.info(f"Order {order.id} status changed to {status}")
         return order
+
+    async def get_users_with_orders_grouped(self) -> List[dict]:
+        """
+        Get users with their order counts and total amounts, sorted by last order date (newest first)
+        Returns: [{user, order_count, total_amount, last_order_date}, ...]
+        """
+        result = await self.session.execute(
+            select(
+                User.id,
+                User.full_name,
+                User.phone,
+                func.count(Order.id).label("order_count"),
+                func.coalesce(func.sum(Order.total_sum), 0).label("total_amount"),
+                func.max(Order.created_at).label("last_order_date"),
+            )
+            .outerjoin(Order, Order.user_id == User.id)
+            .group_by(User.id, User.full_name, User.phone)
+            .order_by(desc(func.max(Order.created_at)))
+        )
+        rows = result.all()
+        users_data = []
+        for row in rows:
+            user = await self._get_user_by_id(row.id)
+            if user and row.order_count > 0:  # Only users with orders
+                users_data.append({
+                    "user": user,
+                    "order_count": row.order_count,
+                    "total_amount": row.total_amount,
+                    "last_order_date": row.last_order_date,
+                })
+        return users_data
+
+    async def _get_user_by_id(self, user_id: int) -> Optional[User]:
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    async def get_user_orders_summary(self, user_id: int) -> List[dict]:
+        """
+        Get summary of user's orders (date, total, count of items)
+        Sorted by date (newest first)
+        """
+        result = await self.session.execute(
+            select(Order)
+            .options(
+                selectinload(Order.user),
+                selectinload(Order.items).selectinload(OrderItem.product),
+            )
+            .where(Order.user_id == user_id)
+            .order_by(desc(Order.created_at))
+        )
+        orders = list(result.scalars().all())
+        
+        summary = []
+        for order in orders:
+            summary.append({
+                "order": order,
+                "item_count": len(order.items),
+                "created_at": order.created_at,
+                "total_sum": order.total_sum,
+            })
+        return summary

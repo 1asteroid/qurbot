@@ -41,8 +41,10 @@ def _build_selection_summary(order_items: List[dict], products_map: dict) -> str
         name = product.name if product else "Noma'lum"
         line_total = item["total_price"]
         total_sum += line_total
+        size = item.get("size")
+        size_text = f" | 📏 {size}" if size else ""
         lines.append(
-            f"• {name}: {item['quantity']:.0f} × {format_number(item['price'])} = {format_number(line_total)} UZS"
+            f"• {name}{size_text}: {item['quantity']:.0f} × {format_number(item['price'])} = {format_number(line_total)} UZS"
         )
     lines.append(f"💰 <b>Jami: {format_number(total_sum)} UZS</b>")
     return "\n".join(lines)
@@ -152,52 +154,28 @@ async def add_product_to_order(callback: CallbackQuery, state: FSMContext, sessi
     data = await state.get_data()
     order_items: List[dict] = data.get("order_items", [])
 
-    # Check if product is already added (pending quantity entry)
+    # Check if product is already being edited (pending)
     pending = data.get("pending_product_id")
     if pending:
         await callback.answer("❗ Avval joriy mahsulot miqdorini kiriting!", show_alert=True)
         return
 
-    # Tekshirish: Agar mahsulot allaqachon order_items'da mavjud bo'lsa
-    existing_item_index = None
-    for idx, item in enumerate(order_items):
-        if item["product_id"] == product_id:
-            existing_item_index = idx
-            break
-    
     prod_service = ProductService(session)
     product = await prod_service.get_by_id(product_id)
     if not product:
         await callback.answer("❌ Mahsulot topilmadi.", show_alert=True)
         return
 
-    if existing_item_index is not None:
-        # Mahsulot allaqachon mavjud - o'zgartirish dialogini ko'rsatish
-        existing_item = order_items[existing_item_index]
-        await state.update_data(
-            pending_product_id=product_id,
-            pending_item_index=existing_item_index
-        )
-        await state.set_state(OrderStates.entering_quantity)
-        
-        await callback.message.answer(
-            f"📝 <b>{product.name} - O'ZGARTIRILSIN</b>\n\n"
-            f"🔍 Joriy: {existing_item['quantity']:.0f} × {format_number(existing_item['price'])} UZS\n\n"
-            f"📦 Yangi miqdorni kiriting ({product.unit}):",
-            parse_mode="HTML",
-            reply_markup=cancel_keyboard(),
-        )
-    else:
-        # Yangi mahsulot qo'shish
-        await state.update_data(pending_product_id=product_id)
-        await state.set_state(OrderStates.entering_quantity)
+    # Allow adding same product multiple times with different sizes/quantities
+    await state.update_data(pending_product_id=product_id)
+    await state.set_state(OrderStates.entering_quantity)
 
-        await callback.message.answer(
-            f"📦 <b>{product.name}</b>\n\n"
-            f"Miqdorni kiriting ({product.unit}):",
-            parse_mode="HTML",
-            reply_markup=cancel_keyboard(),
-        )
+    await callback.message.answer(
+        f"📦 <b>{product.name}</b>\n\n"
+        f"Miqdorni kiriting ({product.unit}):",
+        parse_mode="HTML",
+        reply_markup=cancel_keyboard(),
+    )
     
     await callback.answer()
 
@@ -327,6 +305,24 @@ async def process_quantity(message: Message, state: FSMContext):
         return
 
     await state.update_data(pending_quantity=qty)
+    await state.set_state(OrderStates.entering_size)
+    await message.answer(
+        "📏 Razmer yoki o'lchami kiriting (ixtiyoriy, masalan: M, 10x20, katta):\n"
+        "Yoki tastlang:\n❌ Bekor qilish",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@router.message(OrderStates.entering_size)
+async def process_size(message: Message, state: FSMContext):
+    if message.text == "❌ Bekor qilish":
+        await state.update_data(pending_product_id=None, pending_quantity=None)
+        await state.set_state(OrderStates.selecting_product)
+        await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
+        return
+
+    size = message.text.strip() if message.text else None
+    await state.update_data(pending_size=size)
     await state.set_state(OrderStates.entering_price)
     await message.answer(
         "💰 Narxni kiriting (UZS, 1 birlik uchun):",
@@ -337,7 +333,7 @@ async def process_quantity(message: Message, state: FSMContext):
 @router.message(OrderStates.entering_price)
 async def process_price(message: Message, state: FSMContext, session: AsyncSession):
     if message.text == "❌ Bekor qilish":
-        await state.update_data(pending_product_id=None, pending_quantity=None, pending_item_index=None)
+        await state.update_data(pending_product_id=None, pending_quantity=None, pending_size=None, pending_item_index=None)
         await state.set_state(OrderStates.selecting_product)
         await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
         return
@@ -353,6 +349,7 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
     data = await state.get_data()
     product_id = data["pending_product_id"]
     quantity = data["pending_quantity"]
+    size = data.get("pending_size")
     item_index = data.get("pending_item_index")  # Agar mavjud bo'lsa - o'zgartirilayapti
     total_price = quantity * price
 
@@ -365,15 +362,17 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
             "quantity": quantity,
             "price": price,
             "total_price": total_price,
+            "size": size,
         }
         action_text = "✅ Mahsulot o'zgartirildi!"
     else:
-        # Yangi qo'shilayapti
+        # Yangi qo'shilayapti - same product can be added multiple times with different sizes
         order_items.append({
             "product_id": product_id,
             "quantity": quantity,
             "price": price,
             "total_price": total_price,
+            "size": size,
         })
         action_text = "✅ Mahsulot qo'shildi!"
 
@@ -381,6 +380,7 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
         order_items=order_items,
         pending_product_id=None,
         pending_quantity=None,
+        pending_size=None,
         pending_item_index=None,
     )
     await state.set_state(OrderStates.selecting_product)
@@ -397,11 +397,13 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
     summary_text = _build_selection_summary(order_items, products_map)
     user = await UserService(session).get_by_id(data["selected_user_id"])
     customer_name = user.full_name if user else "Noma'lum"
+    
+    size_text = f" | Razmer: {size}" if size else ""
 
     await message.answer(
         f"👤 Mijoz: <b>{customer_name}</b>\n\n"
         f"{action_text}\n"
-        f"💰 {quantity:.0f} × {format_number(price)} = {format_number(total_price)} UZS\n\n"
+        f"💰 {quantity:.0f} × {format_number(price)} = {format_number(total_price)} UZS{size_text}\n\n"
         f"{summary_text}\n\n"
         f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",

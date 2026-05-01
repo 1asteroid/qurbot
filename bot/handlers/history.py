@@ -1,136 +1,141 @@
 import logging
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards import manager_orders_keyboard, manager_order_detail_keyboard, main_menu_keyboard
-from services import OrderService, UserService
-from utils import format_number, build_receipt
+from bot.keyboards import (
+    history_users_list_keyboard, 
+    history_user_orders_keyboard,
+    history_order_detail_keyboard,
+    main_menu_keyboard
+)
+from services import OrderService
+from utils import format_number, build_receipt, generate_receipt_pdf, generate_user_orders_pdf
 
 logger = logging.getLogger(__name__)
 router = Router()
 
-PER_PAGE = 10
-
 
 @router.message(F.text == "📜 Buyurtmalar tarixi")
 async def show_order_history(message: Message, session: AsyncSession):
-    user_service = UserService(session)
-    user = await user_service.get_by_telegram_id(message.from_user.id)
-    if not user or not user.is_manager:
-        await message.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.")
-        return
-    await _send_orders_page(message, session, page=1, edit=False)
-
-
-@router.callback_query(F.data == "manager_orders_list")
-async def show_manager_orders_inline(callback: CallbackQuery, session: AsyncSession):
-    """Show manager orders in inline format"""
-    user_service = UserService(session)
-    user = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not user or not user.is_manager:
-        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
-        return
-    await _send_orders_page(callback.message, session, page=1, edit=True)
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("manager_orders_page:"))
-async def paginate_manager_orders(callback: CallbackQuery, session: AsyncSession):
-    user_service = UserService(session)
-    user = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not user or not user.is_manager:
-        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
-        return
-    page = int(callback.data.split(":")[1])
-    await _send_orders_page(callback.message, session, page=page, edit=True)
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("manager_order_detail:"))
-async def show_manager_order_detail(callback: CallbackQuery, session: AsyncSession):
-    """Show order details for manager"""
-    order_id = int(callback.data.split(":")[1])
-    
-    order_service = OrderService(session)
-    order = await order_service.get_order_with_details(order_id)
-    
-    if not order:
-        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
-        return
-    
-    # Build detailed receipt
-    text = build_receipt(order)
-    text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
-    if order.accepted_at:
-        text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
-    
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=manager_order_detail_keyboard(order_id, order.status),
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("manager_toggle_accept:"))
-async def toggle_manager_order_status(callback: CallbackQuery, session: AsyncSession):
-    user_service = UserService(session)
-    user = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not user or not user.is_manager:
-        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
-        return
-
-    order_id = int(callback.data.split(":")[1])
-    order_service = OrderService(session)
-    order = await order_service.get_order_with_details(order_id)
-
-    if not order:
-        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
-        return
-
-    new_status = "pending" if order.status == "accepted" else "accepted"
-    order = await order_service.set_order_status(order, new_status)
-
-    text = build_receipt(order)
-    text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
-    if order.accepted_at:
-        text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
-
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=manager_order_detail_keyboard(order.id, order.status),
-    )
-    await callback.answer("✅ Holat yangilandi!")
-
-
-async def _send_orders_page(event, session: AsyncSession, page: int, edit: bool):
-    """Send a page of orders with inline buttons"""
+    """Show order history grouped by users"""
     service = OrderService(session)
-    orders, total = await service.get_all_orders_paginated(page=page, per_page=PER_PAGE)
-
-    if not orders:
-        text = "📜 Buyurtmalar tarixi bo'sh."
-        if edit:
-            await event.edit_text(text)
-        else:
-            await event.answer(text)
-        return
-
-    # Create text header
-    total_pages = (total + PER_PAGE - 1) // PER_PAGE
-    text = f"📜 <b>Buyurtmalar tarixi</b>\n<b>Jami:</b> {total} ta | <b>Sahifa:</b> {page}/{total_pages}\n\n"
-    text += "<b>Oxirgi 10 buyurtmani birinchi ko'rsat, keyingi 10 likka inline belgi orqali o'ting:</b>\n"
+    users_data = await service.get_users_with_orders_grouped()
     
-    keyboard = manager_orders_keyboard(orders, page, total, PER_PAGE)
+    if not users_data:
+        await message.answer(
+            "📜 Buyurtmalar tarixi bo'sh.",
+            reply_markup=main_menu_keyboard()
+        )
+        return
+    
+    text = f"📜 <b>Buyurtmalar tarixi</b>\n"
+    text += f"Jami foydalanuvchilar: <b>{len(users_data)}</b>\n\n"
+    text += "Userlarni tanlang (eng yangi buyurtma bergan user birinchi):"
+    
+    await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=history_users_list_keyboard(users_data)
+    )
 
-    if edit:
-        await event.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
-
-@router.callback_query(F.data == "noop")
-async def noop(callback: CallbackQuery):
+@router.callback_query(F.data == "history_users_list")
+async def show_history_users_list(callback: CallbackQuery, session: AsyncSession):
+    """Show users list in grouped history view"""
+    service = OrderService(session)
+    users_data = await service.get_users_with_orders_grouped()
+    
+    if not users_data:
+        await callback.message.edit_text("📜 Buyurtmalar tarixi bo'sh.")
+        await callback.answer()
+        return
+    
+    text = f"📜 <b>Buyurtmalar tarixi</b>\n"
+    text += f"Jami foydalanuvchilar: <b>{len(users_data)}</b>\n\n"
+    text += "Userlarni tanlang (eng yangi buyurtma bergan user birinchi):"
+    
+    await callback.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=history_users_list_keyboard(users_data)
+    )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("history_user:"))
+async def show_user_orders_history(callback: CallbackQuery, session: AsyncSession):
+    """Show specific user's orders history"""
+    user_id = int(callback.data.split(":")[1])
+    service = OrderService(session)
+    
+    user_orders = await service.get_user_orders_summary(user_id)
+    
+    if not user_orders:
+        await callback.answer("Ushbu user uchun buyurtma topilmadi.", show_alert=True)
+        return
+    
+    # Get user info from first order
+    user = user_orders[0]["order"].user
+    total_count = len(user_orders)
+    total_sum = sum(order["total_sum"] for order in user_orders)
+    
+    text = f"👤 <b>{user.full_name}</b>\n"
+    text += f"📞 {user.phone}\n"
+    text += f"Jami buyurtmalar: <b>{total_count}</b>\n"
+    text += f"Umumiy summa: <b>{format_number(total_sum)} UZS</b>\n\n"
+    text += "Buyurtmalarni tanlang (eng yangi birinchi):"
+    
+    await callback.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=history_user_orders_keyboard(user_id, user_orders)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("history_order_detail:"))
+async def show_order_detail_history(callback: CallbackQuery, session: AsyncSession):
+    """Show order details from history"""
+    order_id = int(callback.data.split(":")[1])
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+    
+    if not order:
+        await callback.answer("Buyurtma topilmadi.", show_alert=True)
+        return
+    
+    text = build_receipt(order)
+    text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
+    if order.accepted_at:
+        text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+    
+    await callback.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=history_order_detail_keyboard(order_id)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("history_order_pdf:"))
+async def download_order_pdf_history(callback: CallbackQuery, session: AsyncSession, bot: Bot):
+    """Download order PDF from history"""
+    order_id = int(callback.data.split(":")[1])
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+    
+    if not order:
+        await callback.answer("Buyurtma topilmadi.", show_alert=True)
+        return
+    
+    pdf_buffer = generate_receipt_pdf(order)
+    pdf_buffer.seek(0)
+    
+    file_name = f"buyurtma_{order_id}.pdf"
+    await callback.message.answer_document(
+        document=pdf_buffer,
+        filename=file_name,
+        caption=f"📄 Buyurtma #{order_id} PDF"
+    )
+    await callback.answer("✅ PDF yuklandi!")

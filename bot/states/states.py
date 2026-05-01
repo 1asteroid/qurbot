@@ -18,6 +18,7 @@ class OrderStates(StatesGroup):
     selecting_product = State()
     entering_quantity = State()
     entering_price = State()
+    entering_size = State()
     reviewing_order = State()
     confirming_order = State()
 
