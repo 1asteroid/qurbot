@@ -38,6 +38,12 @@ class OrderService:
             )
             self.session.add(item)
 
+        # Update user's total_purchase_sum
+        user = await self._get_user_by_id(user_id)
+        if user:
+            user.total_purchase_sum += total_sum
+            self.session.add(user)
+
         await self.session.commit()
         await self.session.refresh(order)
         logger.info(f"Created order id={order.id} user_id={user_id} manager_id={manager_id} total={total_sum}")
@@ -247,3 +253,14 @@ class OrderService:
                 "total_sum": order.total_sum,
             })
         return summary
+
+    async def add_payment(self, user_id: int, amount: float) -> Optional[User]:
+        """Add payment amount to user's paid_sum"""
+        user = await self._get_user_by_id(user_id)
+        if user:
+            user.paid_sum += amount
+            self.session.add(user)
+            await self.session.commit()
+            await self.session.refresh(user)
+            logger.info(f"Added payment of {amount} UZS to user {user_id}. New paid_sum: {user.paid_sum}")
+        return user

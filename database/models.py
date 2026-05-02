@@ -27,6 +27,8 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone: Mapped[str] = mapped_column(String(30), nullable=False)
     is_manager: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    total_purchase_sum: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    paid_sum: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_tashkent, nullable=False)
 
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="user", lazy="selectin", foreign_keys="Order.user_id")

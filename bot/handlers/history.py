@@ -1,14 +1,17 @@
 import logging
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
+from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.keyboards import (
     history_users_list_keyboard, 
     history_user_orders_keyboard,
     history_order_detail_keyboard,
-    main_menu_keyboard
+    main_menu_keyboard,
+    cancel_keyboard,
 )
+from bot.states import PaymentStates
 from services import OrderService
 from utils import format_number, build_receipt, generate_receipt_pdf, generate_user_orders_pdf
 
@@ -83,6 +86,7 @@ async def show_user_orders_history(callback: CallbackQuery, session: AsyncSessio
     text = f"👤 <b>{user.full_name}</b>\n"
     text += f"📞 {user.phone}\n"
     text += f"Jami buyurtmalar: <b>{total_count}</b>\n"
+    text += f"To'lanishi kerak: <b>{format_number(total_sum - user.paid_sum)} UZS</b>\n"
     text += f"Umumiy summa: <b>{format_number(total_sum)} UZS</b>\n\n"
     text += "Buyurtmalarni tanlang (eng yangi birinchi):"
     
@@ -113,7 +117,7 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=history_order_detail_keyboard(order_id)
+        reply_markup=history_order_detail_keyboard(order_id, order.user_id)
     )
     await callback.answer()
 
@@ -165,3 +169,69 @@ async def download_user_orders_pdf_history(callback: CallbackQuery, session: Asy
         caption=f"📄 {user.full_name} buyurtmalari PDF",
     )
     await callback.answer("✅ PDF yuklandi!")
+
+
+@router.callback_query(F.data.startswith("payment_amount:"))
+async def prompt_payment_amount(callback: CallbackQuery, state: FSMContext):
+    """Prompt for payment amount"""
+    parts = callback.data.split(":")
+    order_id = int(parts[1])
+    user_id = int(parts[2])
+    
+    await state.set_state(PaymentStates.entering_amount)
+    await state.update_data(order_id=order_id, user_id=user_id)
+    
+    await callback.message.answer(
+        "💰 <b>To'lash summasi</b>\n\nUZS miqdorini kiriting:",
+        parse_mode="HTML",
+        reply_markup=cancel_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.message(PaymentStates.entering_amount)
+async def process_payment(message: Message, state: FSMContext, session: AsyncSession):
+    """Process payment"""
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
+        return
+    
+    # Parse amount
+    try:
+        amount = float(message.text.strip())
+        if amount <= 0:
+            await message.answer("❌ Summasi musbat son bo'lishi kerak!")
+            return
+    except ValueError:
+        await message.answer("❌ Noto'g'ri format! Raqam kiriting.")
+        return
+    
+    data = await state.get_data()
+    user_id = data["user_id"]
+    order_id = data["order_id"]
+    
+    service = OrderService(session)
+    
+    # Add payment
+    user = await service.add_payment(user_id, amount)
+    
+    if not user:
+        await message.answer("❌ Foydalanuvchi topilmadi.", reply_markup=main_menu_keyboard())
+        await state.clear()
+        return
+    
+    # Get user's orders to show updated info
+    user_orders = await service.get_user_orders_summary(user_id)
+    total_sum = sum(order["total_sum"] for order in user_orders)
+    
+    await state.clear()
+    await message.answer(
+        f"✅ <b>To'lov muvaffaqiyatli saqlandi!</b>\n\n"
+        f"👤 {user.full_name}\n"
+        f"💰 To'langan summa: <b>{format_number(amount)} UZS</b>\n"
+        f"Jami to'langan: <b>{format_number(user.paid_sum)} UZS</b>\n"
+        f"To'lanishi kerak: <b>{format_number(total_sum - user.paid_sum)} UZS</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard()
+    )

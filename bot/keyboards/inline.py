@@ -337,9 +337,13 @@ def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> Inlin
     return builder.as_markup()
 
 
-def history_order_detail_keyboard(order_id: int) -> InlineKeyboardMarkup:
+def history_order_detail_keyboard(order_id: int, user_id: int = None) -> InlineKeyboardMarkup:
     """Keyboard for showing order details in history with PDF option"""
     builder = InlineKeyboardBuilder()
+    if user_id:
+        builder.row(
+            InlineKeyboardButton(text="💰 To'lash", callback_data=f"payment_amount:{order_id}:{user_id}")
+        )
     builder.row(
         InlineKeyboardButton(text="📄 PDF olish", callback_data=f"history_order_pdf:{order_id}")
     )
