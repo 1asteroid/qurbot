@@ -101,7 +101,10 @@ async def show_user_orders_history(callback: CallbackQuery, session: AsyncSessio
 @router.callback_query(F.data.startswith("history_order_detail:"))
 async def show_order_detail_history(callback: CallbackQuery, session: AsyncSession):
     """Show order details from history"""
-    order_id = int(callback.data.split(":")[1])
+    parts = callback.data.split(":")
+    order_id = int(parts[1])
+    user_id = int(parts[2]) if len(parts) > 2 else None
+    
     service = OrderService(session)
     order = await service.get_order_with_details(order_id)
     
@@ -117,7 +120,7 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=history_order_detail_keyboard(order_id, order.user_id)
+        reply_markup=history_order_detail_keyboard(order_id, user_id or order.user_id)
     )
     await callback.answer()
 
@@ -171,15 +174,46 @@ async def download_user_orders_pdf_history(callback: CallbackQuery, session: Asy
     await callback.answer("✅ PDF yuklandi!")
 
 
+@router.callback_query(F.data.startswith("payment_user:"))
+async def prompt_user_payment(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Prompt for payment amount for user"""
+    user_id = int(callback.data.split(":")[1])
+    
+    # Get user info
+    service = OrderService(session)
+    user_orders = await service.get_user_orders_summary(user_id)
+    
+    if not user_orders:
+        await callback.answer("Ushbu user uchun buyurtma topilmadi.", show_alert=True)
+        return
+    
+    user = user_orders[0]["order"].user
+    total_sum = sum(order["total_sum"] for order in user_orders)
+    to_pay = total_sum - user.paid_sum
+    
+    await state.set_state(PaymentStates.entering_amount)
+    await state.update_data(user_id=user_id, payment_from="user_list")
+    
+    await callback.message.answer(
+        f"💰 <b>To'lash</b>\n\n"
+        f"👤 {user.full_name}\n"
+        f"To'lanishi kerak: <b>{format_number(to_pay)} UZS</b>\n\n"
+        f"Miqdorni kiriting (UZS):",
+        parse_mode="HTML",
+        reply_markup=cancel_keyboard(),
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("payment_amount:"))
 async def prompt_payment_amount(callback: CallbackQuery, state: FSMContext):
-    """Prompt for payment amount"""
+    """Prompt for payment amount from order detail"""
     parts = callback.data.split(":")
     order_id = int(parts[1])
     user_id = int(parts[2])
     
     await state.set_state(PaymentStates.entering_amount)
-    await state.update_data(order_id=order_id, user_id=user_id)
+    await state.update_data(order_id=order_id, user_id=user_id, payment_from="order_detail")
     
     await callback.message.answer(
         "💰 <b>To'lash summasi</b>\n\nUZS miqdorini kiriting:",
@@ -193,8 +227,20 @@ async def prompt_payment_amount(callback: CallbackQuery, state: FSMContext):
 async def process_payment(message: Message, state: FSMContext, session: AsyncSession):
     """Process payment"""
     if message.text == "❌ Bekor qilish":
+        data = await state.get_data()
+        user_id = data.get("user_id")
         await state.clear()
-        await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
+        await message.answer("Bekor qilindi.")
+        
+        # Go back to user orders list
+        if user_id:
+            service = OrderService(session)
+            user_orders = await service.get_user_orders_summary(user_id)
+            if user_orders:
+                await message.answer(
+                    "👤 Buyurtmalarga qaytish uchun qayta /start ni bosing yoki tarixni tanlang.",
+                    reply_markup=None,
+                )
         return
     
     # Parse amount
@@ -209,7 +255,7 @@ async def process_payment(message: Message, state: FSMContext, session: AsyncSes
     
     data = await state.get_data()
     user_id = data["user_id"]
-    order_id = data["order_id"]
+    payment_from = data.get("payment_from", "user_list")
     
     service = OrderService(session)
     

@@ -325,9 +325,12 @@ def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> Inlin
         date_str = created_at.strftime('%d.%m.%Y %H:%M')
         text = f"📦 {date_str} | {item_count} ta mahsulot | {format_number(total_sum)} UZS"
         builder.row(
-            InlineKeyboardButton(text=text, callback_data=f"history_order_detail:{order.id}")
+            InlineKeyboardButton(text=text, callback_data=f"history_order_detail:{order.id}:{user_id}")
         )
     
+    builder.row(
+        InlineKeyboardButton(text="💰 To'lash", callback_data=f"payment_user:{user_id}")
+    )
     builder.row(
         InlineKeyboardButton(text="📄 Barcha buyurtmalar PDF", callback_data=f"history_user_pdf:{user_id}")
     )
@@ -340,14 +343,12 @@ def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> Inlin
 def history_order_detail_keyboard(order_id: int, user_id: int = None) -> InlineKeyboardMarkup:
     """Keyboard for showing order details in history with PDF option"""
     builder = InlineKeyboardBuilder()
-    if user_id:
-        builder.row(
-            InlineKeyboardButton(text="💰 To'lash", callback_data=f"payment_amount:{order_id}:{user_id}")
-        )
     builder.row(
         InlineKeyboardButton(text="📄 PDF olish", callback_data=f"history_order_pdf:{order_id}")
     )
+    # Go back to user's orders list
+    back_callback = f"history_user:{user_id}" if user_id else "history_users_list"
     builder.row(
-        InlineKeyboardButton(text="⬅️ Orqaga", callback_data="history_users_list")
+        InlineKeyboardButton(text="⬅️ Orqaga", callback_data=back_callback)
     )
     return builder.as_markup()
