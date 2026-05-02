@@ -144,6 +144,16 @@ def generate_receipt_pdf(order) -> BytesIO:
         "", "", "", "", "JAMI:", f"{order.total_sum:,.0f}"
     ])
     
+    # Add payment info row
+    paid_amount = order.user.paid_sum if hasattr(order.user, 'paid_sum') else 0
+    amount_due = order.user.total_purchase_sum - paid_amount if hasattr(order.user, 'total_purchase_sum') else 0
+    table_data.append([
+        "", "", "", "", "To'langan:", f"{paid_amount:,.0f}"
+    ])
+    table_data.append([
+        "", "", "", "", "To'lanishi kerak:", f"{amount_due:,.0f}"
+    ])
+    
     # Wider column layout for better spacing
     table = Table(table_data, colWidths=[0.5*cm, 3.2*cm, 1.2*cm, 1.5*cm, 2.2*cm, 2.2*cm])
     table.setStyle(TableStyle([
@@ -156,14 +166,17 @@ def generate_receipt_pdf(order) -> BytesIO:
         ('FONTSIZE', (0, 0), (-1, 0), 8),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
         ('TOPPADDING', (0, 0), (-1, 0), 6),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f5f5f5')),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -1), (-1, -1), 10),
-        ('TOPPADDING', (0, -1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
+        ('BACKGROUND', (0, -3), (-1, -1), colors.HexColor('#fff3e0')),
+        ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -3), (-1, -1), 9),
+        ('TOPPADDING', (0, -3), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, -3), (-1, -1), 6),
+        ('BACKGROUND', (0, -3), (-1, -3), colors.HexColor('#f5f5f5')),  # Total row
+        ('BACKGROUND', (0, -2), (-1, -2), colors.HexColor('#c8e6c9')),  # Paid row
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffccbc')),  # Due row
         ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#fafafa')]),
-        ('FONTSIZE', (0, 1), (-1, -2), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -4), [colors.white, colors.HexColor('#fafafa')]),
+        ('FONTSIZE', (0, 1), (-1, -4), 8),
         ('RIGHTPADDING', (4, 1), (-1, -1), 8),
         ('LEFTPADDING', (4, 1), (-1, -1), 8),
     ]))
@@ -245,45 +258,59 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
     
     # Customer summary table
     table_data = [
-        ["Mijoz", "Telefon", "Buyurtmalar", "Jami Summa (UZS)"]
+        ["Mijoz", "Telefon", "Buyurtmalar", "Jami Summa (UZS)", "To'langan (UZS)", "To'lanishi kerak (UZS)"]
     ]
     
     for cust_id, cust_info in customer_data.items():
+        paid = cust_info['user'].paid_sum if hasattr(cust_info['user'], 'paid_sum') else 0
+        due = cust_info['total'] - paid
         table_data.append([
             cust_info['user'].full_name,
             cust_info['user'].phone,
             str(len(cust_info['orders'])),
-            f"{cust_info['total']:,.0f}"
+            f"{cust_info['total']:,.0f}",
+            f"{paid:,.0f}",
+            f"{due:,.0f}"
         ])
     
     # Total row (without <b> tags in data)
+    total_paid = sum(
+        (cust_info['user'].paid_sum if hasattr(cust_info['user'], 'paid_sum') else 0)
+        for cust_info in customer_data.values()
+    )
+    total_due = total_revenue - total_paid
+    
     table_data.append([
         "JAMI",
         "",
         str(len(period_orders)),
-        f"{total_revenue:,.0f}"
+        f"{total_revenue:,.0f}",
+        f"{total_paid:,.0f}",
+        f"{total_due:,.0f}"
     ])
     
-    table = Table(table_data, colWidths=[3.8*cm, 3.2*cm, 2*cm, 3*cm])
+    table = Table(table_data, colWidths=[2.8*cm, 2.8*cm, 1.8*cm, 2.2*cm, 2.2*cm, 2.2*cm])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2196F3')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
         ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-        ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+        ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
         ('TOPPADDING', (0, 0), (-1, 0), 6),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#bbdefb')),
+        ('BACKGROUND', (4, -1), (4, -1), colors.HexColor('#c8e6c9')),
+        ('BACKGROUND', (5, -1), (5, -1), colors.HexColor('#ffccbc')),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -1), (-1, -1), 10),
+        ('FONTSIZE', (0, -1), (-1, -1), 9),
         ('TOPPADDING', (0, -1), (-1, -1), 8),
         ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
         ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#fafafa')]),
-        ('FONTSIZE', (0, 1), (-1, -2), 9),
+        ('FONTSIZE', (0, 1), (-1, -2), 8),
     ]))
     
     elements.append(table)
@@ -360,6 +387,8 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
     summary_text = f"""<b>Hisobot Xulosasi:</b><br/>
 Jami Buyurtmalar: {len(period_orders)} ta<br/>
 Jami Daromad: {total_revenue:,.0f} UZS<br/>
+To'langan Summa: {total_paid:,.0f} UZS<br/>
+To'lanishi kerak: {total_due:,.0f} UZS<br/>
 O'rtacha Buyurtma: {avg_order:,.0f} UZS"""
     
     elements.append(Paragraph(summary_text, summary_style))
@@ -546,13 +575,20 @@ def generate_user_orders_pdf(user, user_orders_list) -> BytesIO:
     elements.append(Paragraph("_" * 80, header_style))
     elements.append(Spacer(1, 0.15*cm))
 
+    paid_sum = user.paid_sum if hasattr(user, 'paid_sum') else 0
+    amount_due = total_sum - paid_sum
+    
     grand_total_table = Table([
         ["Jami buyurtmalar", str(total_orders)],
-        ["Umumiy summa (UZS)", f"{total_sum:,.0f}"]
+        ["Umumiy summa (UZS)", f"{total_sum:,.0f}"],
+        ["To'langan (UZS)", f"{paid_sum:,.0f}"],
+        ["To'lanishi kerak (UZS)", f"{amount_due:,.0f}"]
     ], colWidths=[4.5*cm, 3.5*cm])
     grand_total_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e3f2fd')),
         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#bbdefb')),
+        ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#c8e6c9')),
+        ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#ffccbc')),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a1a1a')),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
@@ -561,7 +597,7 @@ def generate_user_orders_pdf(user, user_orders_list) -> BytesIO:
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('BACKGROUND', (0, 0), (0, 1), colors.HexColor('#f5faff')),
+        ('BACKGROUND', (0, 0), (0, 3), colors.HexColor('#f5faff')),
     ]))
     elements.append(grand_total_table)
 
