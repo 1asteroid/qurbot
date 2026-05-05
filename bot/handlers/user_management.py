@@ -1,4 +1,5 @@
 import logging
+from typing import List
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -6,9 +7,12 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
-from bot.keyboards import main_menu_keyboard
+from bot.keyboards import main_menu_keyboard, category_switch_keyboard, manager_orders_keyboard, manager_order_detail_keyboard
+from bot.states import OrderStates
 from services import UserService, OrderService
-from utils import format_number, generate_manager_report_pdf
+from services import ProductService
+from utils import format_number, generate_manager_report_pdf, build_receipt_with_status
+from utils.receipt_delivery import sync_order_receipt_message
 import pytz
 from config import settings
 
@@ -73,6 +77,9 @@ async def manage_users(callback: CallbackQuery, session: AsyncSession):
 async def user_detail(callback: CallbackQuery, session: AsyncSession):
     """User tafsilotlarini ko'rish va manager qilish"""
     user_id = int(callback.data.split(":")[1])
+            builder.row(
+                InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
+            )
     
     user_service = UserService(session)
     user = await user_service.get_by_id(user_id)
@@ -255,6 +262,9 @@ async def back_to_profile(callback: CallbackQuery, session: AsyncSession):
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
             InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
         )
+        builder.row(
+            InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
+        )
     else:
         builder.row(
             InlineKeyboardButton(text="📋 Mening buyurtmalarim", callback_data="my_orders")
@@ -317,3 +327,162 @@ async def manager_report(callback: CallbackQuery, session: AsyncSession, bot: Bo
     except Exception as e:
         logger.error(f"Report generation error: {e}")
         await callback.answer("❌ Hisobot yaratishda xatolik.", show_alert=True)
+
+
+@router.callback_query(F.data == "manager_orders_list")
+async def manager_orders_list(callback: CallbackQuery, session: AsyncSession):
+    """Manager uchun buyurtmalar ro'yxati."""
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not manager.is_manager:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    orders, total = await service.get_all_orders_paginated(page=1, per_page=10)
+
+    if not orders:
+        await callback.message.edit_text("📋 Buyurtmalar yo'q.")
+        await callback.answer()
+        return
+
+    await callback.message.edit_text(
+        "📋 <b>Buyurtmalar</b>",
+        parse_mode="HTML",
+        reply_markup=manager_orders_keyboard(orders, page=1, total=total),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("manager_orders_page:"))
+async def manager_orders_page(callback: CallbackQuery, session: AsyncSession):
+    """Manager buyurtmalarini sahifalash."""
+    page = int(callback.data.split(":")[1])
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not manager.is_manager:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    orders, total = await service.get_all_orders_paginated(page=page, per_page=10)
+
+    if not orders:
+        await callback.answer("Buyurtmalar topilmadi.", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "📋 <b>Buyurtmalar</b>",
+        parse_mode="HTML",
+        reply_markup=manager_orders_keyboard(orders, page=page, total=total),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("manager_order_detail:"))
+async def manager_order_detail(callback: CallbackQuery, session: AsyncSession):
+    """Manager buyurtma tafsilotlari."""
+    order_id = int(callback.data.split(":")[1])
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not manager.is_manager:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    text = build_receipt_with_status(order)
+    await callback.message.edit_text(
+        f"<pre>{text}</pre>",
+        parse_mode="HTML",
+        reply_markup=manager_order_detail_keyboard(order.id, order.status),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("manager_toggle_accept:"))
+async def manager_toggle_accept(callback: CallbackQuery, session: AsyncSession):
+    """Manager buyurtma statusini o'zgartiradi."""
+    order_id = int(callback.data.split(":")[1])
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not manager.is_manager:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    new_status = "pending" if order.status == "accepted" else "accepted"
+    order = await service.set_order_status(order, new_status)
+
+    text = build_receipt_with_status(order)
+    await callback.message.edit_text(
+        f"<pre>{text}</pre>",
+        parse_mode="HTML",
+        reply_markup=manager_order_detail_keyboard(order.id, order.status),
+    )
+    await callback.answer("✅ Holat o'zgartirildi!")
+
+
+@router.callback_query(F.data.startswith("edit_pending_order:"))
+async def edit_pending_order(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Manager buyurtmani tahrirlash oqimiga kiradi."""
+    order_id = int(callback.data.split(":")[1])
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not manager.is_manager:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    if order.status != "pending":
+        await callback.answer("ℹ️ Faqat tasdiqlanmagan buyurtma tahrirlanadi.", show_alert=True)
+        return
+
+    prod_service = ProductService(session)
+    categories = await prod_service.get_all_categories()
+    if not categories:
+        await callback.answer("❌ Kategoriyalar topilmadi.", show_alert=True)
+        return
+
+    await state.clear()
+    await state.set_state(OrderStates.selecting_category)
+    await state.update_data(
+        editing_order_id=order.id,
+        selected_user_id=order.user_id,
+        order_items=[],
+        selected_category_id=None,
+    )
+
+    await callback.message.answer(
+        f"✏️ <b>Buyurtma #{order.id} tahrirlanmoqda</b>\n\n"
+        f"Mahsulotlarni qayta tanlang. Saqlanganda mijozning eski cheki yangilanadi.",
+        parse_mode="HTML",
+        reply_markup=category_switch_keyboard(
+            categories,
+            callback_prefix="select_category",
+            back_callback="cancel_order",
+        ),
+    )
+    await callback.answer()

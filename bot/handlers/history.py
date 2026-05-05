@@ -12,7 +12,7 @@ from bot.keyboards import (
     cancel_keyboard,
 )
 from bot.states import PaymentStates
-from services import OrderService
+from services import OrderService, UserService
 from utils import format_number, build_receipt, generate_receipt_pdf, generate_user_orders_pdf
 
 logger = logging.getLogger(__name__)
@@ -111,6 +111,10 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     if not order:
         await callback.answer("Buyurtma topilmadi.", show_alert=True)
         return
+
+    user_service = UserService(session)
+    viewer = await user_service.get_by_telegram_id(callback.from_user.id)
+    can_edit = bool(viewer and viewer.is_manager and order.status == "pending")
     
     text = build_receipt(order)
     text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
@@ -120,7 +124,7 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=history_order_detail_keyboard(order_id, user_id or order.user_id)
+        reply_markup=history_order_detail_keyboard(order_id, user_id or order.user_id, can_edit=can_edit)
     )
     await callback.answer()
 

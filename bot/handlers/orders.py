@@ -488,7 +488,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, session: Asy
 
     order_service = OrderService(session)
     if editing_order_id:
-        order = await order_service.update_pending_order(order_id=editing_order_id, items=order_items)
+        order = await order_service.update_pending_order(order_id=editing_order_id, items=order_items, manager_id=manager_id)
     else:
         order = await order_service.create_order(user_id=user_id, items=order_items, manager_id=manager_id)
 
@@ -504,7 +504,6 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, session: Asy
             reply_markup=order_receipt_keyboard(
                 full_order.id,
                 can_accept=full_order.status == "pending",
-                can_edit=full_order.status == "pending",
                 back_callback="my_orders",
             ),
         )

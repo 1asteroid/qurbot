@@ -137,17 +137,12 @@ def product_detail_keyboard(product_id: int, back_callback: Optional[str] = None
 def order_receipt_keyboard(
     order_id: int,
     can_accept: bool = False,
-    can_edit: bool = False,
     back_callback: str = "my_orders",
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if can_accept:
         builder.row(
             InlineKeyboardButton(text="✅ Buyurtmani qabul qildim", callback_data=f"accept_order:{order_id}")
-        )
-    if can_edit:
-        builder.row(
-            InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_pending_order:{order_id}")
         )
     builder.row(
         InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order_id}")
@@ -224,6 +219,9 @@ def manager_order_detail_keyboard(order_id: int, status: str) -> InlineKeyboardM
     else:
         builder.row(
             InlineKeyboardButton(text="✅ Qabul qilingan qilish", callback_data=f"manager_toggle_accept:{order_id}")
+        )
+        builder.row(
+            InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order_id}")
         )
     builder.row(
         InlineKeyboardButton(text="📋 Buyurtmalarim", callback_data="manager_orders_list")
@@ -349,9 +347,13 @@ def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> Inlin
     return builder.as_markup()
 
 
-def history_order_detail_keyboard(order_id: int, user_id: int = None) -> InlineKeyboardMarkup:
+def history_order_detail_keyboard(order_id: int, user_id: int = None, can_edit: bool = False) -> InlineKeyboardMarkup:
     """Keyboard for showing order details in history with PDF option"""
     builder = InlineKeyboardBuilder()
+    if can_edit:
+        builder.row(
+            InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order_id}")
+        )
     builder.row(
         InlineKeyboardButton(text="📄 PDF olish", callback_data=f"history_order_pdf:{order_id}")
     )
