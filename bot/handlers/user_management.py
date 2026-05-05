@@ -77,9 +77,6 @@ async def manage_users(callback: CallbackQuery, session: AsyncSession):
 async def user_detail(callback: CallbackQuery, session: AsyncSession):
     """User tafsilotlarini ko'rish va manager qilish"""
     user_id = int(callback.data.split(":")[1])
-            builder.row(
-                InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
-            )
     
     user_service = UserService(session)
     user = await user_service.get_by_id(user_id)
