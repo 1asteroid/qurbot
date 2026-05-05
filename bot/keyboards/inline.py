@@ -134,11 +134,20 @@ def product_detail_keyboard(product_id: int, back_callback: Optional[str] = None
     return builder.as_markup()
 
 
-def order_receipt_keyboard(order_id: int, can_accept: bool = False, back_callback: str = "my_orders") -> InlineKeyboardMarkup:
+def order_receipt_keyboard(
+    order_id: int,
+    can_accept: bool = False,
+    can_edit: bool = False,
+    back_callback: str = "my_orders",
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if can_accept:
         builder.row(
             InlineKeyboardButton(text="✅ Buyurtmani qabul qildim", callback_data=f"accept_order:{order_id}")
+        )
+    if can_edit:
+        builder.row(
+            InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"edit_pending_order:{order_id}")
         )
     builder.row(
         InlineKeyboardButton(text="📄 PDF olish", callback_data=f"download_receipt_pdf:{order_id}")

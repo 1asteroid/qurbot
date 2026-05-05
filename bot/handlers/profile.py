@@ -4,11 +4,18 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.states import ProfileEditStates
-from bot.keyboards import main_menu_keyboard, remove_keyboard, phone_keyboard, order_receipt_keyboard
-from services import UserService, OrderService
-from utils import build_receipt, format_number, generate_receipt_pdf
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from bot.states import ProfileEditStates, OrderStates
+from bot.keyboards import (
+    main_menu_keyboard,
+    remove_keyboard,
+    phone_keyboard,
+    order_receipt_keyboard,
+    category_switch_keyboard,
+)
+from services import UserService, OrderService, ProductService
+from utils import build_receipt_with_status, format_number
+from utils.receipt_delivery import sync_order_receipt_message
+from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 logger = logging.getLogger(__name__)
@@ -289,21 +296,17 @@ async def show_order_receipt(callback: CallbackQuery, session: AsyncSession, bot
         await callback.answer("❌ Bu buyurtma sizning emas.", show_alert=True)
         return
 
-    if order.status != "pending":
-        await callback.answer("ℹ️ Bu buyurtma allaqachon tasdiqlangan yoki holati o'zgargan.", show_alert=True)
-        return
-    
-    receipt_text = build_receipt(order)
-    
-    # Add status info
-    receipt_text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
-    if order.accepted_at:
-        receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+    receipt_text = build_receipt_with_status(order)
     
     await callback.message.edit_text(
         f"<pre>{receipt_text}</pre>",
         parse_mode="HTML",
-        reply_markup=order_receipt_keyboard(order.id, can_accept=order.status == "pending", back_callback="my_orders")
+        reply_markup=order_receipt_keyboard(
+            order.id,
+            can_accept=order.status == "pending",
+            can_edit=order.status == "pending",
+            back_callback="my_orders",
+        )
     )
     await callback.answer()
 
@@ -354,16 +357,73 @@ async def accept_order_handler(callback: CallbackQuery, session: AsyncSession, b
             logger.error(f"Could not notify manager: {e}")
     
     # Show updated receipt
-    receipt_text = build_receipt(order)
-    receipt_text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
-    receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+    receipt_text = build_receipt_with_status(order)
+
+    try:
+        await sync_order_receipt_message(
+            bot=bot,
+            session=session,
+            order=order,
+            text=f"<pre>{receipt_text}</pre>",
+            reply_markup=order_receipt_keyboard(order.id, can_accept=False, can_edit=False, back_callback="my_orders"),
+        )
+    except Exception as e:
+        logger.warning(f"Could not sync original receipt message: {e}")
     
     await callback.message.edit_text(
         f"<pre>{receipt_text}</pre>",
         parse_mode="HTML",
-        reply_markup=order_receipt_keyboard(order.id, can_accept=False, back_callback="my_orders")
+        reply_markup=order_receipt_keyboard(order.id, can_accept=False, can_edit=False, back_callback="my_orders")
     )
     await callback.answer("✅ Buyurtma qabul qilindi!")
+
+
+@router.callback_query(F.data.startswith("edit_pending_order:"))
+async def edit_pending_order(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Pending orderni qayta tuzish uchun order creation flow'ga qaytarish."""
+    order_id = int(callback.data.split(":")[1])
+
+    order_service = OrderService(session)
+    order = await order_service.get_order_with_details(order_id)
+
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    if order.user.telegram_id != callback.from_user.id:
+        await callback.answer("❌ Bu buyurtma sizning emas.", show_alert=True)
+        return
+
+    if order.status != "pending":
+        await callback.answer("ℹ️ Faqat tasdiqlanmagan buyurtma tahrirlanadi.", show_alert=True)
+        return
+
+    prod_service = ProductService(session)
+    categories = await prod_service.get_all_categories()
+    if not categories:
+        await callback.answer("❌ Kategoriyalar topilmadi.", show_alert=True)
+        return
+
+    await state.clear()
+    await state.set_state(OrderStates.selecting_category)
+    await state.update_data(
+        editing_order_id=order.id,
+        selected_user_id=order.user_id,
+        order_items=[],
+        selected_category_id=None,
+    )
+
+    await callback.message.answer(
+        f"✏️ <b>Buyurtma #{order.id} tahrirlanmoqda</b>\n\n"
+        f"Mahsulotlarni qayta tanlang. Saqlanganda oldingi chek yangilanadi.",
+        parse_mode="HTML",
+        reply_markup=category_switch_keyboard(
+            categories,
+            callback_prefix="select_category",
+            back_callback="cancel_order",
+        ),
+    )
+    await callback.answer()
 
 
 
@@ -384,11 +444,14 @@ async def download_receipt_pdf(callback: CallbackQuery, session: AsyncSession, b
         await callback.answer("❌ Bu buyurtma sizning emas.", show_alert=True)
         return
     
-    # PDF yaratish
+    # PDF yuklash mavjud bo'lib qoladi: foydalanuvchi uni buyurtmalar bo'limidan olishi mumkin.
+    from aiogram.types import BufferedInputFile
+    from utils import generate_receipt_pdf
+
     try:
         pdf_buffer = generate_receipt_pdf(order)
         pdf_data = pdf_buffer.getvalue()
-        
+
         await bot.send_document(
             chat_id=callback.from_user.id,
             document=BufferedInputFile(pdf_data, filename=f"chek_{order.id}.pdf"),

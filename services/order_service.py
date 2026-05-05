@@ -49,6 +49,50 @@ class OrderService:
         logger.info(f"Created order id={order.id} user_id={user_id} manager_id={manager_id} total={total_sum}")
         return order
 
+    async def update_pending_order(
+        self,
+        order_id: int,
+        items: List[dict],
+        manager_id: Optional[int] = None,
+    ) -> Order:
+        order = await self.get_order_with_details(order_id)
+        if not order:
+            raise ValueError("Order not found")
+        if order.status != "pending":
+            raise ValueError("Only pending orders can be edited")
+
+        old_total = order.total_sum or 0.0
+        new_total = sum(item["total_price"] for item in items)
+
+        order.items.clear()
+        order.total_sum = new_total
+        order.status = "pending"
+        order.accepted_at = None
+        if manager_id is not None:
+            order.manager_id = manager_id
+
+        for item_data in items:
+            order.items.append(
+                OrderItem(
+                    product_id=item_data["product_id"],
+                    quantity=item_data["quantity"],
+                    price=item_data["price"],
+                    total_price=item_data["total_price"],
+                    size=item_data.get("size"),
+                )
+            )
+
+        user = await self._get_user_by_id(order.user_id)
+        if user:
+            user.total_purchase_sum += new_total - old_total
+            self.session.add(user)
+
+        self.session.add(order)
+        await self.session.commit()
+        await self.session.refresh(order)
+        logger.info(f"Updated pending order id={order.id} total={new_total}")
+        return order
+
     async def get_order_with_details(self, order_id: int) -> Optional[Order]:
         result = await self.session.execute(
             select(Order)

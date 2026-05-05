@@ -50,6 +50,14 @@ def build_receipt(order: Order) -> str:
     return "\n".join(lines)
 
 
+def build_receipt_with_status(order: Order) -> str:
+    receipt_text = build_receipt(order)
+    receipt_text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
+    if order.accepted_at:
+        receipt_text += f"✅ <b>Qabul qilindi:</b> {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
+    return receipt_text
+
+
 def build_order_preview(items: List[dict], products_map: dict) -> str:
     """Build order preview text from FSM items."""
     lines = []

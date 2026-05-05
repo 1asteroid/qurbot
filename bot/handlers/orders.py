@@ -16,7 +16,8 @@ from bot.keyboards import (
     cancel_keyboard,
 )
 from services import UserService, ProductService, OrderService
-from utils import build_receipt, build_order_preview, generate_receipt_pdf, format_number
+from utils import build_receipt_with_status, build_order_preview, format_number
+from utils.receipt_delivery import sync_order_receipt_message
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -479,40 +480,33 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, session: Asy
     data = await state.get_data()
     user_id = data["selected_user_id"]
     order_items: List[dict] = data.get("order_items", [])
+    editing_order_id = data.get("editing_order_id")
     
     # Manager ID olinadi
     manager_user = await UserService(session).get_by_telegram_id(callback.from_user.id)
     manager_id = manager_user.id if manager_user else None
 
     order_service = OrderService(session)
-    order = await order_service.create_order(user_id=user_id, items=order_items, manager_id=manager_id)
+    if editing_order_id:
+        order = await order_service.update_pending_order(order_id=editing_order_id, items=order_items)
+    else:
+        order = await order_service.create_order(user_id=user_id, items=order_items, manager_id=manager_id)
 
-    # Load full order with relations
     full_order = await order_service.get_order_with_details(order.id)
-    receipt_text = build_receipt(full_order)
+    receipt_text = build_receipt_with_status(full_order)
 
-    # Send receipt to client (text)
     try:
-        await bot.send_message(
-            chat_id=full_order.user.telegram_id,
+        await sync_order_receipt_message(
+            bot=bot,
+            session=session,
+            order=full_order,
             text=f"<pre>{receipt_text}</pre>",
-            parse_mode="HTML",
             reply_markup=order_receipt_keyboard(
                 full_order.id,
                 can_accept=full_order.status == "pending",
+                can_edit=full_order.status == "pending",
                 back_callback="my_orders",
             ),
-        )
-        
-        # Send PDF receipt
-        from aiogram.types import FSInputFile, BufferedInputFile
-        pdf_buffer = generate_receipt_pdf(full_order)
-        pdf_data = pdf_buffer.getvalue()
-        
-        await bot.send_document(
-            chat_id=full_order.user.telegram_id,
-            document=BufferedInputFile(pdf_data, filename=f"chek_{full_order.id}.pdf"),
-            caption=f"📄 Chek #{full_order.id}"
         )
         client_notified = True
     except Exception as e:

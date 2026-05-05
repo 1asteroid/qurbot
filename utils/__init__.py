@@ -2,6 +2,7 @@ from utils.formatting import (
     format_number,
     format_phone,
     build_receipt,
+    build_receipt_with_status,
     build_order_preview,
     format_order_list_item,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "format_number",
     "format_phone",
     "build_receipt",
+    "build_receipt_with_status",
     "build_order_preview",
     "format_order_list_item",
     "generate_receipt_pdf",
