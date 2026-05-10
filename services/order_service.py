@@ -308,3 +308,18 @@ class OrderService:
             await self.session.refresh(user)
             logger.info(f"Added payment of {amount} UZS to user {user_id}. New paid_sum: {user.paid_sum}")
         return user
+
+    async def delete_order(self, order_id: int) -> bool:
+        order = await self.get_order_with_details(order_id)
+        if not order:
+            return False
+
+        user = await self._get_user_by_id(order.user_id)
+        if user:
+            user.total_purchase_sum = max(0.0, (user.total_purchase_sum or 0.0) - (order.total_sum or 0.0))
+            self.session.add(user)
+
+        await self.session.delete(order)
+        await self.session.commit()
+        logger.info(f"Deleted order id={order_id}")
+        return True

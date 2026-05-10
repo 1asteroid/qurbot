@@ -22,12 +22,16 @@ class ManagerCheckMiddleware(BaseMiddleware):
         elif isinstance(event, CallbackQuery) and event.from_user:
             user_id = event.from_user.id
 
+        is_admin = settings.is_admin(user_id) if user_id else False
         is_manager = user_id in settings.manager_ids_list if user_id else False
+        if is_admin:
+            is_manager = True
         if user_id and settings.is_permanent_manager(user_id):
             is_manager = True
         
         # Debug logging
-        logger.debug(f"User {user_id}: is_manager={is_manager}, manager_ids={settings.manager_ids_list}")
+        logger.debug(f"User {user_id}: is_manager={is_manager}, is_admin={is_admin}, manager_ids={settings.manager_ids_list}, admin_ids={settings.admin_ids_list}")
         
         data["is_manager"] = is_manager
+        data["is_admin"] = is_admin
         return await handler(event, data)

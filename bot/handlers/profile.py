@@ -4,6 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from bot.states import ProfileEditStates
 from bot.keyboards import (
     main_menu_keyboard,
@@ -28,6 +29,10 @@ def _profile_keyboard(user):
     builder.row(
         InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
     )
+    if settings.is_admin(user.telegram_id):
+        builder.row(
+            InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")
+        )
     if user.is_manager:
         builder.row(
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
@@ -55,7 +60,9 @@ async def show_profile(message: Message, session: AsyncSession):
         await message.answer("❌ Profil topilmadi.")
         return
     
-    status_text = "👨‍💼 Menejer" if user.is_manager else "👤 Mijoz"
+    status_text = "👑 Admin" if settings.is_admin(user.telegram_id) else ("👨‍💼 Menejer" if user.is_manager else "👤 Mijoz")
+    if settings.is_admin(user.telegram_id):
+        status_text = "👑 Admin"
     
     text = (
         f"<b>👤 Mening Profilim</b>\n\n"
@@ -267,6 +274,8 @@ async def back_to_profile_from_orders(callback: CallbackQuery, session: AsyncSes
         return
     
     status_text = "👨‍💼 Menejer" if user.is_manager else "👤 Mijoz"
+    if settings.is_admin(user.telegram_id):
+        status_text = "👑 Admin"
     
     text = (
         f"<b>👤 Mening Profilim</b>\n\n"

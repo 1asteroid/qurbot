@@ -27,7 +27,14 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, 
         text += f"Siz allaqachon ro'yxatdan o'tgansiz.\n\n"
         
         # Database'dan is_manager qiymatini o'qiyamiz
-        if user.is_manager:
+        if settings.is_admin(user.telegram_id):
+            text += "Siz admin sifatida ro'yxatdan o'tgansiz. Asosiy menyu:"
+            await message.answer(
+                text,
+                parse_mode="HTML",
+                reply_markup=main_menu_keyboard()
+            )
+        elif user.is_manager:
             text += "Siz menejer sifatida ro'yxatdan o'tgansiz. Asosiy menyu:"
             await message.answer(
                 text,
@@ -55,7 +62,7 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, 
         await state.clear()
         await message.answer(
             f"👋 Xush kelibsiz, <b>{user.full_name}</b>!\n"
-            f"Siz menejer sifatida avtomatik tanildingiz. Asosiy menyu:",
+            f"Siz {'admin' if settings.is_admin(user.telegram_id) else 'menejer'} sifatida avtomatik tanildingiz. Asosiy menyu:",
             parse_mode="HTML",
             reply_markup=main_menu_keyboard(),
         )
@@ -130,7 +137,15 @@ async def _save_user(
         f"📱 Tel: {user.phone}\n\n"
     )
     
-    if user.is_manager:
+    if settings.is_admin(user.telegram_id):
+        text += "Siz admin sifatida ro'yxatdan o'tdingiz. Asosiy menyu:"
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard()
+        )
+        logger.info(f"Admin registered: {user.telegram_id} - {user.full_name}")
+    elif user.is_manager:
         text += "Siz menejer sifatida ro'yxatdan o'tdingiz. Asosiy menyu:"
         await message.answer(
             text, 

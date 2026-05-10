@@ -153,9 +153,10 @@ def order_receipt_keyboard(
     return builder.as_markup()
 
 
-def unit_keyboard() -> InlineKeyboardMarkup:
+def unit_keyboard(units: Optional[List[str]] = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for unit in ["kg", "chelak", "dona", "metr"]:
+    available_units = units or ["kg", "chelak", "dona", "metr"]
+    for unit in available_units:
         builder.button(text=unit, callback_data=f"unit:{unit}")
     builder.adjust(3)
     builder.row(
@@ -209,7 +210,7 @@ def manager_orders_keyboard(orders: List[Order], page: int, total: int, per_page
     return builder.as_markup()
 
 
-def manager_order_detail_keyboard(order_id: int, status: str) -> InlineKeyboardMarkup:
+def manager_order_detail_keyboard(order_id: int, status: str, can_delete: bool = False) -> InlineKeyboardMarkup:
     """Keyboard for viewing manager order details"""
     builder = InlineKeyboardBuilder()
     if status == "accepted":
@@ -223,11 +224,24 @@ def manager_order_detail_keyboard(order_id: int, status: str) -> InlineKeyboardM
         builder.row(
             InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order_id}")
         )
+    if can_delete:
+        builder.row(
+            InlineKeyboardButton(text="🗑 Buyurtmani o'chirish", callback_data=f"delete_order:{order_id}")
+        )
     builder.row(
         InlineKeyboardButton(text="📋 Buyurtmalarim", callback_data="manager_orders_list")
     )
     builder.row(
         InlineKeyboardButton(text="🏠 Asosiy sahifa", callback_data="back_to_main_menu")
+    )
+    return builder.as_markup()
+
+
+def confirm_order_delete_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="✅ Ha, o'chirish", callback_data=f"confirm_delete_order:{order_id}"),
+        InlineKeyboardButton(text="❌ Yo'q", callback_data=f"manager_order_detail:{order_id}"),
     )
     return builder.as_markup()
 

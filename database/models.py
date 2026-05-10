@@ -66,6 +66,17 @@ class Category(Base):
         return f"<Category id={self.id} name={self.name}>"
 
 
+class Unit(Base):
+    __tablename__ = "units"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_tashkent, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<Unit id={self.id} name={self.name}>"
+
+
 class Order(Base):
     __tablename__ = "orders"
 

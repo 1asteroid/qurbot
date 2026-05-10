@@ -12,8 +12,9 @@ class UserService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def _ensure_permanent_manager(self, user: User) -> User:
-        if user and settings.is_permanent_manager(user.telegram_id) and not user.is_manager:
+    async def _ensure_privileged(self, user: User) -> User:
+        should_be_manager = settings.is_permanent_manager(user.telegram_id) or settings.is_admin(user.telegram_id) or user.telegram_id in settings.manager_ids_list
+        if user and should_be_manager and not user.is_manager:
             user.is_manager = True
             self.session.add(user)
             await self.session.commit()
@@ -26,12 +27,12 @@ class UserService:
         )
         user = result.scalar_one_or_none()
         if user:
-            return await self._ensure_permanent_manager(user)
+            return await self._ensure_privileged(user)
         return None
 
     async def create(self, telegram_id: int, full_name: str, phone: str) -> User:
         # Manager tekshiruvi
-        is_manager = telegram_id in settings.manager_ids_list or settings.is_permanent_manager(telegram_id)
+        is_manager = telegram_id in settings.manager_ids_list or settings.is_admin(telegram_id) or settings.is_permanent_manager(telegram_id)
         
         user = User(
             telegram_id=telegram_id, 

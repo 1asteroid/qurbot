@@ -32,6 +32,12 @@ class ProductStates(StatesGroup):
     confirm_delete = State()
 
 
+class UnitStates(StatesGroup):
+    entering_name = State()
+    editing_name = State()
+    selecting_replacement = State()
+
+
 class MonitoringStates(StatesGroup):
     selecting_custom_month = State()
     viewing_report = State()

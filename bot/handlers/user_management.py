@@ -7,7 +7,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
-from bot.keyboards import main_menu_keyboard, category_switch_keyboard, manager_orders_keyboard, manager_order_detail_keyboard
+from bot.keyboards import main_menu_keyboard, category_switch_keyboard, manager_orders_keyboard, manager_order_detail_keyboard, confirm_order_delete_keyboard
 from bot.states import OrderStates
 from services import UserService, OrderService
 from services import ProductService
@@ -40,10 +40,20 @@ async def manage_users(callback: CallbackQuery, session: AsyncSession):
     
     text = "👥 <b>Userlarni Boshqarish</b>\n\n"
     
-    managers = [u for u in all_users if u.is_manager]
-    regular_users = [u for u in all_users if not u.is_manager]
+    admins = [u for u in all_users if settings.is_admin(u.telegram_id)]
+    managers = [u for u in all_users if u.is_manager and not settings.is_admin(u.telegram_id)]
+    regular_users = [u for u in all_users if not u.is_manager and not settings.is_admin(u.telegram_id)]
     
-    text += f"👨‍💼 <b>Menegerlar ({len(managers)} ta)</b>\n"
+    text += f"👑 <b>Adminlar ({len(admins)} ta)</b>\n"
+    for u in admins:
+        builder.row(
+            InlineKeyboardButton(
+                text=f"👑 {u.full_name} - ADMIN",
+                callback_data=f"user_detail:{u.id}"
+            )
+        )
+
+    text += f"\n👨‍💼 <b>Menegerlar ({len(managers)} ta)</b>\n"
     for u in managers:
         builder.row(
             InlineKeyboardButton(
@@ -91,7 +101,7 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
     
-    status = "👨‍💼 MENEJER" if user.is_manager else "👤 Oddiy Mijoz"
+    status = "👑 ADMIN" if settings.is_admin(user.telegram_id) else ("👨‍💼 MENEJER" if user.is_manager else "👤 Oddiy Mijoz")
     
     text = (
         f"👤 <b>User Tafsilotlari</b>\n\n"
@@ -115,6 +125,13 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
             builder.row(
                 InlineKeyboardButton(
                     text="🔒 Doimiy menejer",
+                    callback_data="noop"
+                )
+            )
+        elif settings.is_admin(user.telegram_id):
+            builder.row(
+                InlineKeyboardButton(
+                    text="🔒 Admin",
                     callback_data="noop"
                 )
             )
@@ -400,9 +417,56 @@ async def manager_order_detail(callback: CallbackQuery, session: AsyncSession):
     await callback.message.edit_text(
         f"<pre>{text}</pre>",
         parse_mode="HTML",
-        reply_markup=manager_order_detail_keyboard(order.id, order.status),
+        reply_markup=manager_order_detail_keyboard(order.id, order.status, can_delete=settings.is_admin(manager.telegram_id)),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("delete_order:"))
+async def delete_order_prompt(callback: CallbackQuery, session: AsyncSession):
+    order_id = int(callback.data.split(":")[1])
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not settings.is_admin(manager.telegram_id):
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+
+    if not order:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        f"🗑 <b>Buyurtma #{order.id}</b> ni o'chirishni tasdiqlaysizmi?\n\n"
+        f"{build_receipt_with_status(order)}",
+        parse_mode="HTML",
+        reply_markup=confirm_order_delete_keyboard(order.id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("confirm_delete_order:"))
+async def confirm_delete_order(callback: CallbackQuery, session: AsyncSession):
+    order_id = int(callback.data.split(":")[1])
+    user_service = UserService(session)
+    manager = await user_service.get_by_telegram_id(callback.from_user.id)
+
+    if not manager or not settings.is_admin(manager.telegram_id):
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    service = OrderService(session)
+    deleted = await service.delete_order(order_id)
+
+    if not deleted:
+        await callback.answer("❌ Buyurtma topilmadi.", show_alert=True)
+        return
+
+    await callback.answer("✅ Buyurtma o'chirildi!", show_alert=True)
+    await manager_orders_list(callback, session)
 
 
 @router.callback_query(F.data.startswith("manager_toggle_accept:"))

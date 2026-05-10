@@ -13,7 +13,7 @@ from bot.keyboards import (
     main_menu_keyboard,
     category_switch_keyboard,
 )
-from services import ProductService, UserService
+from services import ProductService, UserService, UnitService
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -151,13 +151,15 @@ async def process_product_name(message: Message, state: FSMContext, session: Asy
 
 
 @router.callback_query(ProductStates.selecting_category, F.data.startswith("create_product_category:"))
-async def process_product_category(callback: CallbackQuery, state: FSMContext):
+async def process_product_category(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     category_id = int(callback.data.split(":")[1])
     await state.update_data(product_category_id=category_id)
     await state.set_state(ProductStates.entering_unit)
+    unit_service = UnitService(session)
+    units = await unit_service.get_all_names()
     await callback.message.edit_text(
         "📏 O'lchov birligini tanlang:",
-        reply_markup=unit_keyboard(),
+        reply_markup=unit_keyboard(units),
     )
     await callback.answer()
 
@@ -231,13 +233,15 @@ async def start_edit_product(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(ProductStates.editing_name)
-async def process_edit_name(message: Message, state: FSMContext):
+async def process_edit_name(message: Message, state: FSMContext, session: AsyncSession):
     if not message.text or len(message.text.strip()) < 2:
         await message.answer("❗ Iltimos, mahsulot nomini kiriting.")
         return
     await state.update_data(new_product_name=message.text.strip())
     await state.set_state(ProductStates.editing_unit)
-    await message.answer("📏 Yangi o'lchov birligini tanlang:", reply_markup=unit_keyboard())
+    unit_service = UnitService(session)
+    units = await unit_service.get_all_names()
+    await message.answer("📏 Yangi o'lchov birligini tanlang:", reply_markup=unit_keyboard(units))
 
 
 @router.callback_query(ProductStates.editing_unit, F.data.startswith("unit:"))

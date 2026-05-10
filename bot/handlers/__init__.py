@@ -1,5 +1,5 @@
 from aiogram import Router
-from bot.handlers import start, products, orders, history, monitoring, profile, user_management, misc
+from bot.handlers import start, products, orders, history, monitoring, profile, user_management, misc, admin_tools
 
 
 def setup_routers() -> Router:
@@ -8,6 +8,7 @@ def setup_routers() -> Router:
     main_router.include_router(start.router)
     main_router.include_router(profile.router)
     main_router.include_router(user_management.router)
+    main_router.include_router(admin_tools.router)
     main_router.include_router(orders.router)
     main_router.include_router(products.router)
     main_router.include_router(history.router)
