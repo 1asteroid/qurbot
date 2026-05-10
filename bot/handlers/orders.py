@@ -1,6 +1,7 @@
 import logging
 from typing import List
 from aiogram import Router, F, Bot
+from aiogram.filters import StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -522,7 +523,7 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, session: Asy
     
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🏠 Asosiy menyuga qaytish", callback_data="back_to_main_menu")
+        InlineKeyboardButton(text="🏠 Asosiy sahifaga qaytish", callback_data="back_to_main_menu")
     )
     
     await callback.message.edit_text(
@@ -531,6 +532,12 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext, session: Asy
         f"{status_text}",
         parse_mode="HTML",
         reply_markup=builder.as_markup()
+    )
+    await callback.message.bot.send_message(
+        chat_id=callback.from_user.id,
+        text="🏠 <b>Asosiy menyu</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(),
     )
     await callback.answer("✅ Buyurtma saqlandi!")
 
@@ -586,11 +593,11 @@ async def cancel_order(callback: CallbackQuery, state: FSMContext):
     
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🏠 Asosiy menyuga qaytish", callback_data="back_to_main_menu")
+        InlineKeyboardButton(text="🏠 Asosiy sahifaga qaytish", callback_data="back_to_main_menu")
     )
     
     await callback.message.edit_text(
-        "❌ <b>Buyurtma bekor qilindi</b>\n\nAsosiy menyuga qaytish:",
+        "❌ <b>Buyurtma bekor qilindi</b>\n\nAsosiy sahifaga qaytish:",
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
@@ -609,3 +616,13 @@ async def back_to_main_menu(callback: CallbackQuery, state: FSMContext):
         reply_markup=main_menu_keyboard()
     )
     await callback.answer()
+
+
+@router.message(StateFilter(None), F.text == "❌ Bekor qilish")
+async def stale_cancel_button_to_main_menu(message: Message):
+    """State yo'q holatda qolib ketgan bekor qilish tugmasini asosiy menyuga yo'naltirish."""
+    await message.answer(
+        "🏠 <b>Asosiy menyu</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(),
+    )
