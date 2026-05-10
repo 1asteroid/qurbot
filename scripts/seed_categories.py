@@ -25,9 +25,9 @@ CATEGORIES = [
         ("Nova guruntovka", "chelak"),
     ]),
     ("lak", [
-        ("Nova lak", "chelak"),
-        ("Nova zemshuk", "chelak"),
-        ("Nova otochento", "chelak"),
+        ("Nova lak", "kg"),
+        ("Nova zemshuk", "kg"),
+        ("Nova otochento", "kg"),
     ]),
     ("tiyaga", [
         ("Dela", "metr"),

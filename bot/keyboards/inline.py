@@ -155,7 +155,7 @@ def order_receipt_keyboard(
 
 def unit_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for unit in ["chelak", "dona", "metr"]:
+    for unit in ["kg", "chelak", "dona", "metr"]:
         builder.button(text=unit, callback_data=f"unit:{unit}")
     builder.adjust(3)
     builder.row(
