@@ -187,6 +187,17 @@ async def add_product_to_order(callback: CallbackQuery, state: FSMContext, sessi
     await callback.answer()
 
 
+@router.message(OrderStates.selecting_product, F.text == "❌ Bekor qilish")
+async def cancel_during_product_selection(message: Message, state: FSMContext):
+    """Mahsulot tanlanayotganda reply tugma orqali bekor qilish"""
+    await state.clear()
+    await message.answer(
+        "❌ <b>Buyurtma bekor qilindi</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard()
+    )
+
+
 @router.callback_query(OrderStates.selecting_category, F.data.startswith("select_category:"))
 async def select_category(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     category_id = int(callback.data.split(":")[1])
