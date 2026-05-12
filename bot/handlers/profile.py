@@ -35,8 +35,7 @@ def _profile_keyboard(user):
         )
     if user.is_admin:
         builder.row(
-            InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
-            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
+            InlineKeyboardButton(text=" Hisobot", callback_data="manager_report")
         )
         builder.row(
             InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
