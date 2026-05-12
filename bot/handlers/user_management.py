@@ -28,8 +28,8 @@ async def manage_users(callback: CallbackQuery, session: AsyncSession):
     user_service = UserService(session)
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     
-    # Tekshirish: Manager bo'lsa
-    if not user or not user.is_manager:
+    # Tekshirish: faqat adminlar
+    if not user or not settings.is_admin(user.telegram_id):
         await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
         return
     
@@ -95,9 +95,9 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ User topilmadi.", show_alert=True)
         return
     
-    # Tekshirish: Requestor manager bo'lsa
+    # Tekshirish: faqat adminlar
     requestor = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not requestor or not requestor.is_manager:
+    if not requestor or not settings.is_admin(requestor.telegram_id):
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
     
@@ -174,9 +174,9 @@ async def make_manager(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ User topilmadi.", show_alert=True)
         return
     
-    # Tekshirish: Requestor manager bo'lsa
+    # Tekshirish: faqat adminlar
     requestor = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not requestor or not requestor.is_manager:
+    if not requestor or not settings.is_admin(requestor.telegram_id):
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
     
@@ -213,9 +213,9 @@ async def revoke_manager(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ User topilmadi.", show_alert=True)
         return
     
-    # Tekshirish: Requestor manager bo'lsa
+    # Tekshirish: faqat adminlar
     requestor = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not requestor or not requestor.is_manager:
+    if not requestor or not settings.is_admin(requestor.telegram_id):
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
     
@@ -271,9 +271,16 @@ async def back_to_profile(callback: CallbackQuery, session: AsyncSession):
     builder.row(
         InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
     )
-    if user.is_manager:
+    if settings.is_admin(user.telegram_id):
         builder.row(
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
+            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
+        )
+        builder.row(
+            InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
+        )
+    elif user.is_manager:
+        builder.row(
             InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
         )
         builder.row(

@@ -33,9 +33,16 @@ def _profile_keyboard(user):
         builder.row(
             InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")
         )
-    if user.is_manager:
+    if settings.is_admin(user.telegram_id):
         builder.row(
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
+            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
+        )
+        builder.row(
+            InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
+        )
+    elif user.is_manager:
+        builder.row(
             InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
         )
         builder.row(

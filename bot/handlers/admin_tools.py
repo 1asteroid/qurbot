@@ -21,6 +21,7 @@ def _is_admin_user(user) -> bool:
 
 def _admin_panel_keyboard() -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"))
     builder.row(InlineKeyboardButton(text="📏 O'lchov birliklari", callback_data="manage_units"))
     builder.row(InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list"))
     builder.row(InlineKeyboardButton(text="⬅️ Profil", callback_data="back_to_profile"))
