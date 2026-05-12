@@ -13,9 +13,16 @@ class UserService:
         self.session = session
 
     async def _ensure_privileged(self, user: User) -> User:
-        should_be_manager = settings.is_permanent_manager(user.telegram_id) or settings.is_admin(user.telegram_id) or user.telegram_id in settings.manager_ids_list
+        should_be_admin = settings.is_admin(user.telegram_id)
+        should_be_manager = settings.is_permanent_manager(user.telegram_id) or should_be_admin or user.telegram_id in settings.manager_ids_list
+        changed = False
+        if user and should_be_admin and not user.is_admin:
+            user.is_admin = True
+            changed = True
         if user and should_be_manager and not user.is_manager:
             user.is_manager = True
+            changed = True
+        if changed:
             self.session.add(user)
             await self.session.commit()
             await self.session.refresh(user)
@@ -32,18 +39,20 @@ class UserService:
 
     async def create(self, telegram_id: int, full_name: str, phone: str) -> User:
         # Manager tekshiruvi
-        is_manager = telegram_id in settings.manager_ids_list or settings.is_admin(telegram_id) or settings.is_permanent_manager(telegram_id)
+        is_admin = settings.is_admin(telegram_id)
+        is_manager = telegram_id in settings.manager_ids_list or is_admin or settings.is_permanent_manager(telegram_id)
         
         user = User(
             telegram_id=telegram_id, 
             full_name=full_name, 
             phone=phone,
-            is_manager=is_manager
+            is_manager=is_manager,
+            is_admin=is_admin,
         )
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
-        logger.info(f"Created user telegram_id={telegram_id} name={full_name} is_manager={is_manager}")
+        logger.info(f"Created user telegram_id={telegram_id} name={full_name} is_manager={is_manager} is_admin={is_admin}")
         return user
 
     async def get_or_create(self, telegram_id: int, full_name: str, phone: str) -> tuple[User, bool]:
@@ -73,4 +82,7 @@ class UserService:
         result = await self.session.execute(
             select(User).where(User.id == user_id)
         )
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if user:
+            return await self._ensure_privileged(user)
+        return None

@@ -29,7 +29,7 @@ async def manage_users(callback: CallbackQuery, session: AsyncSession):
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     
     # Tekshirish: faqat adminlar
-    if not user or not settings.is_admin(user.telegram_id):
+    if not user or not user.is_admin:
         await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
         return
     
@@ -40,9 +40,9 @@ async def manage_users(callback: CallbackQuery, session: AsyncSession):
     
     text = "👥 <b>Userlarni Boshqarish</b>\n\n"
     
-    admins = [u for u in all_users if settings.is_admin(u.telegram_id)]
-    managers = [u for u in all_users if u.is_manager and not settings.is_admin(u.telegram_id)]
-    regular_users = [u for u in all_users if not u.is_manager and not settings.is_admin(u.telegram_id)]
+    admins = [u for u in all_users if u.is_admin]
+    managers = [u for u in all_users if u.is_manager and not u.is_admin]
+    regular_users = [u for u in all_users if not u.is_manager and not u.is_admin]
     
     text += f"👑 <b>Adminlar ({len(admins)} ta)</b>\n"
     for u in admins:
@@ -97,11 +97,11 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
     
     # Tekshirish: faqat adminlar
     requestor = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not requestor or not settings.is_admin(requestor.telegram_id):
+    if not requestor or not requestor.is_admin:
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
     
-    status = "👑 ADMIN" if settings.is_admin(user.telegram_id) else ("👨‍💼 MENEJER" if user.is_manager else "👤 Oddiy Mijoz")
+    status = "👑 ADMIN" if user.is_admin else ("👨‍💼 MENEJER" if user.is_manager else "👤 Oddiy Mijoz")
     
     text = (
         f"👤 <b>User Tafsilotlari</b>\n\n"
@@ -120,7 +120,22 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
     
     builder = InlineKeyboardBuilder()
     
-    if user.is_manager:
+    if user.is_admin:
+        if settings.is_admin(user.telegram_id):
+            builder.row(
+                InlineKeyboardButton(
+                    text="🔒 Doimiy admin",
+                    callback_data="noop"
+                )
+            )
+        else:
+            builder.row(
+                InlineKeyboardButton(
+                    text="❌ Admin Huquqini Olib Olish",
+                    callback_data=f"revoke_admin:{user.id}"
+                )
+            )
+    elif user.is_manager:
         if settings.is_permanent_manager(user.telegram_id):
             builder.row(
                 InlineKeyboardButton(
@@ -128,15 +143,12 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
                     callback_data="noop"
                 )
             )
-        elif settings.is_admin(user.telegram_id):
-            builder.row(
-                InlineKeyboardButton(
-                    text="🔒 Admin",
-                    callback_data="noop"
-                )
-            )
         else:
             builder.row(
+                InlineKeyboardButton(
+                    text="✅ Admin Qilish",
+                    callback_data=f"make_admin:{user.id}"
+                ),
                 InlineKeyboardButton(
                     text="❌ Menejer Huquqini Olib Olish",
                     callback_data=f"revoke_manager:{user.id}"
@@ -144,6 +156,10 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
             )
     else:
         builder.row(
+            InlineKeyboardButton(
+                text="✅ Admin Qilish",
+                callback_data=f"make_admin:{user.id}"
+            ),
             InlineKeyboardButton(
                 text="✅ Menejer Qilish",
                 callback_data=f"make_manager:{user.id}"
@@ -176,11 +192,15 @@ async def make_manager(callback: CallbackQuery, session: AsyncSession):
     
     # Tekshirish: faqat adminlar
     requestor = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not requestor or not settings.is_admin(requestor.telegram_id):
+    if not requestor or not requestor.is_admin:
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
+
+    if user.is_manager:
+        await callback.answer("ℹ️ User allaqachon menejer.", show_alert=True)
+        return
     
-    # Manager qilish
+    # Menejer qilish
     user.is_manager = True
     session.add(user)
     await session.commit()
@@ -215,15 +235,18 @@ async def revoke_manager(callback: CallbackQuery, session: AsyncSession):
     
     # Tekshirish: faqat adminlar
     requestor = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not requestor or not settings.is_admin(requestor.telegram_id):
+    if not requestor or not requestor.is_admin:
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
-    
-    # Menejer huquqini olib olish
+
     if settings.is_permanent_manager(user.telegram_id):
         await callback.answer("🔒 Bu akkaunt doimiy menejer va uni olib bo'lmaydi.", show_alert=True)
         return
 
+    if user.is_admin and settings.is_admin(user.telegram_id):
+        await callback.answer("🔒 Bu akkaunt doimiy admin va uni olib bo'lmaydi.", show_alert=True)
+        return
+    
     user.is_manager = False
     session.add(user)
     await session.commit()
@@ -235,10 +258,88 @@ async def revoke_manager(callback: CallbackQuery, session: AsyncSession):
     await callback.message.bot.send_message(
         chat_id=user.telegram_id,
         text=f"ℹ️ <b>Birinchi xabar</b>\n\n"
-        f"Sizning menejer huquqi olib olindi.\n"
+        f"Sizning menejer huquqingiz olib olindi.\n"
         f"Endi faqat oddiy mijoz sifatida ishlasiz.",
         parse_mode="HTML"
     )
+
+
+@router.callback_query(F.data.startswith("make_admin:"))
+async def make_admin(callback: CallbackQuery, session: AsyncSession):
+    """Userni admin qilish"""
+    user_id = int(callback.data.split(":")[1])
+
+    user_service = UserService(session)
+    user = await user_service.get_by_id(user_id)
+
+    if not user:
+        await callback.answer("❌ User topilmadi.", show_alert=True)
+        return
+
+    requestor = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not requestor or not requestor.is_admin:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    if user.is_admin:
+        await callback.answer("ℹ️ User allaqachon admin.", show_alert=True)
+        return
+
+    user.is_admin = True
+    user.is_manager = True
+    session.add(user)
+    await session.commit()
+
+    await callback.answer(f"✅ {user.full_name} admin bo'ldi!", show_alert=True)
+    logger.info(f"User {user.id} ({user.full_name}) made admin by {requestor.id}")
+
+    await callback.message.bot.send_message(
+        chat_id=user.telegram_id,
+        text=f"🎉 <b>Tabriklaymiz!</b>\n\n"
+        f"Siz admin sifatida tayinlandingiz!\n"
+        f"Endi admin panel va boshqaruv imkoniyatlariga egasiz.",
+        parse_mode="HTML"
+    )
+
+    await user_detail(callback, session)
+
+
+@router.callback_query(F.data.startswith("revoke_admin:"))
+async def revoke_admin(callback: CallbackQuery, session: AsyncSession):
+    """Admin huquqini olib olish"""
+    user_id = int(callback.data.split(":")[1])
+
+    user_service = UserService(session)
+    user = await user_service.get_by_id(user_id)
+
+    if not user:
+        await callback.answer("❌ User topilmadi.", show_alert=True)
+        return
+
+    requestor = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not requestor or not requestor.is_admin:
+        await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
+        return
+
+    if user.is_admin and settings.is_admin(user.telegram_id):
+        await callback.answer("🔒 Bu akkaunt doimiy admin va uni olib bo'lmaydi.", show_alert=True)
+        return
+
+    user.is_admin = False
+    session.add(user)
+    await session.commit()
+
+    await callback.answer(f"✅ {user.full_name} admin huquqi olib olindi!", show_alert=True)
+    logger.info(f"User {user.id} ({user.full_name}) revoked admin by {requestor.id}")
+
+    await callback.message.bot.send_message(
+        chat_id=user.telegram_id,
+        text=f"ℹ️ <b>Birinchi xabar</b>\n\n"
+        f"Sizning admin huquqingiz olib olindi.",
+        parse_mode="HTML"
+    )
+
+    await user_detail(callback, session)
     
     # Yangilangan holatni ko'rsatish
     await user_detail(callback, session)
@@ -271,7 +372,7 @@ async def back_to_profile(callback: CallbackQuery, session: AsyncSession):
     builder.row(
         InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
     )
-    if settings.is_admin(user.telegram_id):
+    if user.is_admin:
         builder.row(
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
             InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
@@ -424,7 +525,7 @@ async def manager_order_detail(callback: CallbackQuery, session: AsyncSession):
     await callback.message.edit_text(
         f"<pre>{text}</pre>",
         parse_mode="HTML",
-        reply_markup=manager_order_detail_keyboard(order.id, order.status, can_delete=settings.is_admin(manager.telegram_id)),
+        reply_markup=manager_order_detail_keyboard(order.id, order.status, can_delete=manager.is_admin),
     )
     await callback.answer()
 
@@ -435,7 +536,7 @@ async def delete_order_prompt(callback: CallbackQuery, session: AsyncSession):
     user_service = UserService(session)
     manager = await user_service.get_by_telegram_id(callback.from_user.id)
 
-    if not manager or not settings.is_admin(manager.telegram_id):
+    if not manager or not manager.is_admin:
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
 
@@ -461,7 +562,7 @@ async def confirm_delete_order(callback: CallbackQuery, session: AsyncSession):
     user_service = UserService(session)
     manager = await user_service.get_by_telegram_id(callback.from_user.id)
 
-    if not manager or not settings.is_admin(manager.telegram_id):
+    if not manager or not manager.is_admin:
         await callback.answer("❌ Sizda huquq yo'q.", show_alert=True)
         return
 

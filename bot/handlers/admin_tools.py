@@ -16,7 +16,7 @@ router = Router()
 
 
 def _is_admin_user(user) -> bool:
-    return bool(user and settings.is_admin(user.telegram_id))
+    return bool(user and user.is_admin)
 
 
 def _admin_panel_keyboard() -> InlineKeyboardBuilder:

@@ -29,11 +29,11 @@ def _profile_keyboard(user):
     builder.row(
         InlineKeyboardButton(text="✏️ Telefon raqam", callback_data="update_phone")
     )
-    if settings.is_admin(user.telegram_id):
+    if user.is_admin:
         builder.row(
             InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")
         )
-    if settings.is_admin(user.telegram_id):
+    if user.is_admin:
         builder.row(
             InlineKeyboardButton(text="👥 Userlarni boshqarish", callback_data="manage_users"),
             InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
@@ -67,8 +67,8 @@ async def show_profile(message: Message, session: AsyncSession):
         await message.answer("❌ Profil topilmadi.")
         return
     
-    status_text = "👑 Admin" if settings.is_admin(user.telegram_id) else ("👨‍💼 Menejer" if user.is_manager else "👤 Mijoz")
-    if settings.is_admin(user.telegram_id):
+    status_text = "👑 Admin" if user.is_admin else ("👨‍💼 Menejer" if user.is_manager else "👤 Mijoz")
+    if user.is_admin:
         status_text = "👑 Admin"
     
     text = (
@@ -281,7 +281,7 @@ async def back_to_profile_from_orders(callback: CallbackQuery, session: AsyncSes
         return
     
     status_text = "👨‍💼 Menejer" if user.is_manager else "👤 Mijoz"
-    if settings.is_admin(user.telegram_id):
+    if user.is_admin:
         status_text = "👑 Admin"
     
     text = (

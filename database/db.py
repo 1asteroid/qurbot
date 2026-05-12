@@ -36,12 +36,27 @@ async def init_db() -> None:
             columns = {row[1] for row in rows}
             if "receipt_message_id" not in columns:
                 await conn.execute(text("ALTER TABLE orders ADD COLUMN receipt_message_id INTEGER;"))
+            user_rows = (await conn.execute(text("PRAGMA table_info(users);"))).fetchall()
+            user_columns = {row[1] for row in user_rows}
+            if "is_admin" not in user_columns:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0;"))
         else:
             result = await conn.execute(text(
                 "SELECT column_name FROM information_schema.columns WHERE table_name='orders' AND column_name='receipt_message_id';"
             ))
             if not result.fetchone():
                 await conn.execute(text("ALTER TABLE orders ADD COLUMN receipt_message_id INTEGER;"))
+            result = await conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='is_admin';"
+            ))
+            if not result.fetchone():
+                await conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE;"))
+
+        for telegram_id in settings.admin_ids_list:
+            await conn.execute(
+                text("UPDATE users SET is_admin = 1, is_manager = 1 WHERE telegram_id = :telegram_id;"),
+                {"telegram_id": telegram_id},
+            )
     logger.info("Database initialized successfully.")
 
 
