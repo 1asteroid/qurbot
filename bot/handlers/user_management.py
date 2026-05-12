@@ -355,7 +355,7 @@ async def back_to_profile(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Profil topilmadi.")
         return
     
-    status_text = "👨‍💼 Menejer" if user.is_manager else "👤 Mijoz"
+    status_text = "� Admin" if user.is_admin else ("👨‍💼 Menejer" if user.is_manager else "👤 Mijoz")
     
     text = (
         f"<b>👤 Mening Profilim</b>\n\n"
@@ -374,7 +374,10 @@ async def back_to_profile(callback: CallbackQuery, session: AsyncSession):
     )
     if user.is_admin:
         builder.row(
-            InlineKeyboardButton(text=" Hisobot", callback_data="manager_report")
+            InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")
+        )
+        builder.row(
+            InlineKeyboardButton(text="📊 Hisobot", callback_data="manager_report")
         )
         builder.row(
             InlineKeyboardButton(text="📋 Buyurtmalar", callback_data="manager_orders_list")
