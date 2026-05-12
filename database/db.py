@@ -52,10 +52,11 @@ async def init_db() -> None:
             if not result.fetchone():
                 await conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE;"))
 
+        backfill_sql = text("UPDATE users SET is_admin = :is_admin, is_manager = :is_manager WHERE telegram_id = :telegram_id;")
         for telegram_id in settings.admin_ids_list:
             await conn.execute(
-                text("UPDATE users SET is_admin = 1, is_manager = 1 WHERE telegram_id = :telegram_id;"),
-                {"telegram_id": telegram_id},
+                backfill_sql,
+                {"is_admin": True, "is_manager": True, "telegram_id": telegram_id},
             )
     logger.info("Database initialized successfully.")
 
