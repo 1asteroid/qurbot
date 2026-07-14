@@ -28,12 +28,17 @@ jobs:
       - name: Run basic import check
         run: python -m compileall config.py main.py database bot services utils scripts
 
+      - name: Prepare SSH key
+        run: |
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" | sed 's/\\n/\n/g' > /github/workspace/.deploy_key
+          chmod 600 /github/workspace/.deploy_key
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key_path: /github/workspace/.deploy_key
           port: ${{ secrets.EC2_PORT }}
           script: |
             set -e
