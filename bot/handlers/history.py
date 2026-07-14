@@ -8,6 +8,7 @@ from bot.keyboards import (
     history_users_list_keyboard, 
     history_user_orders_keyboard,
     history_order_detail_keyboard,
+    history_return_items_keyboard,
     order_receipt_keyboard,
     main_menu_keyboard,
     cancel_keyboard,
@@ -21,11 +22,15 @@ from utils import (
     generate_receipt_pdf,
     generate_user_orders_pdf,
 )
-from utils.formatting import get_order_item_remaining_quantity
+from utils.formatting import get_order_item_remaining_quantity, order_has_returnable_items
 from utils.receipt_delivery import sync_order_receipt_message
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def _can_manage_returns(viewer) -> bool:
+    return bool(viewer and (viewer.is_manager or viewer.is_admin))
 
 
 @router.message(F.text == "📜 Buyurtmalar tarixi")
@@ -124,6 +129,7 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     user_service = UserService(session)
     viewer = await user_service.get_by_telegram_id(callback.from_user.id)
     can_edit = bool(viewer and (viewer.is_manager or viewer.is_admin) and order.status == "pending")
+    can_return = _can_manage_returns(viewer)
     
     text = build_receipt(order)
     text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
@@ -133,7 +139,45 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=history_order_detail_keyboard(order, user_id or order.user_id, can_edit=can_edit)
+        reply_markup=history_order_detail_keyboard(
+            order,
+            user_id or order.user_id,
+            can_edit=can_edit,
+            can_return=can_return,
+        )
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("return_menu:"))
+async def show_return_items_menu(callback: CallbackQuery, session: AsyncSession):
+    """Show order items list for returning products."""
+    user_service = UserService(session)
+    viewer = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not _can_manage_returns(viewer):
+        await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    order_id = int(parts[1])
+    user_id = int(parts[2]) if len(parts) > 2 else None
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+    if not order:
+        await callback.answer("Buyurtma topilmadi.", show_alert=True)
+        return
+
+    text = (
+        f"↩️ <b>Qaytgan maxsulotlar</b>\n"
+        f"🧾 Buyurtma #{order.id}\n"
+        f"👤 {order.user.full_name}\n\n"
+        f"Qaytariladigan mahsulotni tanlang:"
+    )
+    await callback.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=history_return_items_keyboard(order, user_id or order.user_id),
     )
     await callback.answer()
 
@@ -283,10 +327,31 @@ async def process_return_quantity(message: Message, state: FSMContext, session: 
         except Exception as exc:
             logger.warning("Could not sync returned receipt for order %s: %s", updated_order.id, exc)
 
+        user_service = UserService(session)
+        viewer = await user_service.get_by_telegram_id(message.from_user.id)
+        can_return = _can_manage_returns(viewer)
+        resolved_user_id = history_user_id or updated_order.user_id
+        if can_return and order_has_returnable_items(updated_order):
+            reply_markup = history_return_items_keyboard(updated_order, resolved_user_id)
+            menu_text = (
+                f"✅ Qaytarish saqlandi.\n\n"
+                f"↩️ <b>Qaytgan maxsulotlar</b>\n"
+                f"🧾 Buyurtma #{updated_order.id}\n\n"
+                f"Boshqa mahsulot qaytarish uchun tanlang:"
+            )
+        else:
+            reply_markup = history_order_detail_keyboard(
+                updated_order,
+                resolved_user_id,
+                can_edit=updated_order.status == "pending" and can_return,
+                can_return=can_return,
+            )
+            menu_text = f"✅ Qaytarish saqlandi.\n\n<pre>{receipt_text}</pre>"
+
         await message.answer(
-            f"✅ Qaytarish saqlandi.\n\n<pre>{receipt_text}</pre>",
+            menu_text,
             parse_mode="HTML",
-            reply_markup=history_order_detail_keyboard(updated_order, history_user_id or updated_order.user_id, can_edit=updated_order.status == "pending"),
+            reply_markup=reply_markup,
         )
 
     await state.clear()

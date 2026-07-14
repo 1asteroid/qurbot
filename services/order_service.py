@@ -73,9 +73,12 @@ class OrderService:
             raise ValueError("Only pending orders can be edited")
 
         old_total = order.total_sum or 0.0
+        old_returned_total = sum((item.total_price or 0.0) for item in order.return_items or [])
+        old_net_total = max(0.0, old_total - old_returned_total)
         new_total = sum(item["total_price"] for item in items)
 
         order.items.clear()
+        order.return_items.clear()
         order.total_sum = new_total
         order.status = "pending"
         order.accepted_at = None
@@ -95,7 +98,7 @@ class OrderService:
 
         user = await self._get_user_by_id(order.user_id)
         if user:
-            user.total_purchase_sum += new_total - old_total
+            user.total_purchase_sum += new_total - old_net_total
             self.session.add(user)
 
         self.session.add(order)

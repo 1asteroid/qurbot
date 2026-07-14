@@ -49,6 +49,10 @@ def get_order_item_remaining_quantity(item: OrderItem) -> float:
     return max(0.0, (item.quantity or 0.0) - get_order_item_returned_quantity(item))
 
 
+def order_has_returnable_items(order: Order) -> bool:
+    return any(get_order_item_remaining_quantity(item) > 0 for item in order.items)
+
+
 def build_return_items_text(order: Order) -> str:
     return_items = getattr(order, "return_items", []) or []
     if not return_items:
