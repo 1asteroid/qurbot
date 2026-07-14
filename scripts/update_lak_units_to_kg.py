@@ -1,7 +1,7 @@
 """Update all products in the `lak` category to use `kg` as the unit.
 
-Run this against the active database, including Heroku PostgreSQL:
-    heroku run python scripts/update_lak_units_to_kg.py
+Run this against the active database on any server:
+    python scripts/update_lak_units_to_kg.py
 
 It is safe to run locally as long as DATABASE_URL points to the target DB.
 """

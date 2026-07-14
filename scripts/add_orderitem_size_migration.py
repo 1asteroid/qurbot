@@ -1,8 +1,8 @@
 """Add `size` column to `order_items` table if missing.
 
-Run on the server where your DATABASE_URL is configured (Heroku):
+Run on the server where your DATABASE_URL is configured:
 
-    heroku run python scripts/add_orderitem_size_migration.py
+    python scripts/add_orderitem_size_migration.py
 
 The script is idempotent: it checks for existence and exits if column already present.
 """

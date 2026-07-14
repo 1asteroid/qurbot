@@ -1,8 +1,8 @@
 """Add `is_admin` column to `users` table and backfill configured admins.
 
-Run on Heroku or any PostgreSQL environment:
+Run on any server where DATABASE_URL points to the target database:
 
-    heroku run python scripts/add_admin_column_migration.py
+    python scripts/add_admin_column_migration.py
 
 The script is idempotent and safe to run multiple times.
 """

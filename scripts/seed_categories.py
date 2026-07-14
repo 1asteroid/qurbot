@@ -3,8 +3,8 @@
 This script drops all existing tables, recreates the schema from the current models,
 and inserts only the requested categories and products.
 
-Use locally or on Heroku with care:
-    heroku run python scripts/seed_categories.py
+Use locally or on a server with care:
+    python scripts/seed_categories.py
 """
 import logging
 import sys

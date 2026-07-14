@@ -8,7 +8,7 @@ This migration:
 
 Run on the server where your DATABASE_URL is configured:
 
-    heroku run python scripts/add_payment_columns_migration.py
+    python scripts/add_payment_columns_migration.py
 
 The script is idempotent: it checks for existence and exits if columns already present.
 """

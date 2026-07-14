@@ -1,8 +1,8 @@
 """Add `accepted_at` column to `orders` table for SQLite if missing.
 
-Run on the server where your DATABASE_URL is configured (Heroku):
+Run on the server where your DATABASE_URL is configured:
 
-    heroku run python scripts/add_accepted_at_migration.py
+    python scripts/add_accepted_at_migration.py
 
 The script is idempotent: it checks for existence and exits if column already present.
 """

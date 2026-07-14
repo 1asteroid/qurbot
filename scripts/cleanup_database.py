@@ -1,10 +1,10 @@
 """Cleanup script: remove all data except products and categories.
 
 Usage:
-  - Non-interactive (Heroku): set env var `CONFIRM_CLEAN_DB=1` or pass `--yes`.
-  - Local interactive: run without `--yes` to see counts, then run with `--yes`.
+    - Non-interactive: set env var `CONFIRM_CLEAN_DB=1` or pass `--yes`.
+    - Interactive: run without `--yes` to see counts, then run with `--yes`.
 
-Run on Heroku: `heroku run python scripts/cleanup_database.py --app <your-app-name>`
+Run on the target server: `python scripts/cleanup_database.py --yes`
 """
 import asyncio
 import argparse
@@ -70,7 +70,7 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
 
-    # If using Heroku, DATABASE_URL should already be set in the env and picked up by config
+    # DATABASE_URL is loaded from the environment via config.py
     print(f"Using DB URL: {settings.DATABASE_URL.split('://')[0]}://***")
 
     asyncio.run(cleanup(confirm=args.yes))

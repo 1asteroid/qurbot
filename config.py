@@ -1,4 +1,3 @@
-import os
 from typing import List
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, ConfigDict
@@ -8,7 +7,7 @@ load_dotenv()
 
 
 def _fix_database_url(url: str) -> str:
-    """Convert Heroku's postgres:// URL to the asyncpg-compatible scheme."""
+    """Normalize PostgreSQL URLs to the asyncpg-compatible scheme."""
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+asyncpg://", 1)
     if url.startswith("postgresql://") and "+asyncpg" not in url:
@@ -24,6 +23,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./construction_bot.db"
     TIMEZONE: str = "Asia/Tashkent"
     LOG_LEVEL: str = "INFO"
+    LOG_FILE: str = "bot.log"
 
     model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 

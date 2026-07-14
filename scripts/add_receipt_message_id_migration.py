@@ -1,8 +1,8 @@
 """Add `receipt_message_id` column to `orders` table if missing.
 
-Run on Heroku or any PostgreSQL environment:
+Run on any server where DATABASE_URL points to the target database:
 
-    heroku run python scripts/add_receipt_message_id_migration.py
+    python scripts/add_receipt_message_id_migration.py
 
 The script is idempotent and safe to run multiple times.
 """
