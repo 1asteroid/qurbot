@@ -169,11 +169,16 @@ async def show_return_items_menu(callback: CallbackQuery, session: AsyncSession)
         await callback.answer("Buyurtma topilmadi.", show_alert=True)
         return
 
+    prompt_text = (
+        "Qaytariladigan mahsulotni tanlang:"
+        if order_has_returnable_items(order)
+        else "Bu buyurtmada qaytariladigan mahsulot qolmagan."
+    )
     text = (
         f"↩️ <b>Qaytgan maxsulotlar</b>\n"
         f"🧾 Buyurtma #{order.id}\n"
         f"👤 {order.user.full_name}\n\n"
-        f"Qaytariladigan mahsulotni tanlang:"
+        f"{prompt_text}"
     )
     await callback.message.edit_text(
         text,

@@ -7,7 +7,6 @@ from utils.formatting import (
     format_quantity,
     get_order_item_remaining_quantity,
     get_order_net_total,
-    order_has_returnable_items,
 )
 
 
@@ -425,7 +424,7 @@ def history_order_detail_keyboard(
             InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order.id}")
         )
 
-    if can_return and order_has_returnable_items(order):
+    if can_return:
         return_callback = (
             f"return_menu:{order.id}:{user_id}"
             if user_id

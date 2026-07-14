@@ -14,7 +14,12 @@ class UserService:
 
     async def _ensure_privileged(self, user: User) -> User:
         should_be_admin = settings.is_admin(user.telegram_id)
-        should_be_manager = settings.is_permanent_manager(user.telegram_id) or should_be_admin or user.telegram_id in settings.manager_ids_list
+        should_be_manager = (
+            user.is_admin
+            or should_be_admin
+            or settings.is_permanent_manager(user.telegram_id)
+            or user.telegram_id in settings.manager_ids_list
+        )
         changed = False
         if user and should_be_admin and not user.is_admin:
             user.is_admin = True
