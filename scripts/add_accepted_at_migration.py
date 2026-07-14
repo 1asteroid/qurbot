@@ -9,6 +9,9 @@ The script is idempotent: it checks for existence and exits if column already pr
 import sys
 import logging
 import asyncio
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from config import settings

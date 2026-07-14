@@ -13,6 +13,33 @@ sudo apt install -y git python3 python3-venv python3-pip
 
 If your EC2 image does not already provide Python 3.12, install a Python 3.12 build first and use that interpreter for the virtual environment.
 
+## 1.1 Install the database first
+
+If you want the database on the same EC2 instance, install PostgreSQL now before configuring the bot.
+
+```bash
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl enable --now postgresql
+sudo systemctl status postgresql
+```
+
+Create a database user and database for the bot:
+
+```bash
+sudo -u postgres psql
+```
+
+Inside the `psql` shell, run:
+
+```sql
+CREATE USER qurbot_user WITH PASSWORD 'strong_password_here';
+CREATE DATABASE qurbot OWNER qurbot_user;
+GRANT ALL PRIVILEGES ON DATABASE qurbot TO qurbot_user;
+\q
+```
+
+If you use AWS RDS or another external PostgreSQL server, skip the local install and create the database there instead.
+
 ## 2. Clone the project
 
 ```bash
@@ -38,7 +65,7 @@ Create a `.env` file in the project root with at least these values:
 
 ```env
 BOT_TOKEN=123456:your-token
-DATABASE_URL=postgresql+asyncpg://user:password@db-host:5432/dbname
+DATABASE_URL=postgresql+asyncpg://qurbot_user:strong_password_here@127.0.0.1:5432/qurbot
 MANAGER_IDS=123456789,987654321
 ADMIN_IDS=1504360843
 PERMANENT_MANAGER_IDS=1504360843
@@ -103,6 +130,25 @@ journalctl -u qurbot -f
 ```
 
 The app also writes to `LOG_FILE` when the path is writable.
+
+### If you see `socket.gaierror: [Errno -3] Temporary failure in name resolution`
+
+This means the database host inside `DATABASE_URL` cannot be resolved from the EC2 instance.
+
+Check these things:
+
+1. Make sure the host part of `DATABASE_URL` is real and not a placeholder like `db-host`.
+2. If PostgreSQL runs on the same EC2 instance, use `localhost` or `127.0.0.1`.
+3. If you use AWS RDS, copy the exact endpoint from the RDS console.
+4. Verify DNS works on the instance:
+
+```bash
+getent hosts your-db-hostname
+nslookup your-db-hostname
+```
+
+5. Make sure the database security group allows connections from the EC2 security group or private IP range.
+6. If the host is in a private subnet, confirm the EC2 instance is in the same VPC or has network access to that subnet.
 
 ## Notes
 

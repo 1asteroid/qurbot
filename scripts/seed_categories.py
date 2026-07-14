@@ -9,6 +9,9 @@ Use locally or on a server with care:
 import logging
 import sys
 import asyncio
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from config import settings
 from database.models import Base, Category, Product, now_tashkent

@@ -21,6 +21,23 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+async def _get_or_bootstrap_profile_user(message_or_callback, session: AsyncSession):
+    user_service = UserService(session)
+    telegram_user = message_or_callback.from_user
+    user = await user_service.get_by_telegram_id(telegram_user.id)
+    if user:
+        return user
+
+    full_name = telegram_user.full_name or telegram_user.first_name or "User"
+    user = await user_service.create(
+        telegram_id=telegram_user.id,
+        full_name=full_name,
+        phone="unknown",
+    )
+    logger.info("Bootstrapped profile for missing user telegram_id=%s", telegram_user.id)
+    return user
+
+
 def _profile_keyboard(user):
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -59,12 +76,7 @@ def _profile_keyboard(user):
 @router.message(F.text == "👤 Profil")
 async def show_profile(message: Message, session: AsyncSession):
     """Foydalanuvchi profilini ko'rish"""
-    user_service = UserService(session)
-    user = await user_service.get_by_telegram_id(message.from_user.id)
-    
-    if not user:
-        await message.answer("❌ Profil topilmadi.")
-        return
+    user = await _get_or_bootstrap_profile_user(message, session)
     
     status_text = "👑 Admin" if user.is_admin else ("👨‍💼 Menejer" if user.is_manager else "👤 Mijoz")
     if user.is_admin:
@@ -272,12 +284,7 @@ async def show_my_orders(callback: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data == "back_to_profile_from_orders")
 async def back_to_profile_from_orders(callback: CallbackQuery, session: AsyncSession):
     """Mening buyurtmalardan profilga qaytish"""
-    user_service = UserService(session)
-    user = await user_service.get_by_telegram_id(callback.from_user.id)
-    
-    if not user:
-        await callback.answer("❌ Profil topilmadi.")
-        return
+    user = await _get_or_bootstrap_profile_user(callback, session)
     
     status_text = "👨‍💼 Menejer" if user.is_manager else "👤 Mijoz"
     if user.is_admin:

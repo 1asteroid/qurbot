@@ -8,6 +8,10 @@ It is safe to run locally as long as DATABASE_URL points to the target DB.
 
 import asyncio
 import logging
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
