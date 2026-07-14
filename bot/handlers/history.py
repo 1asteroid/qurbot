@@ -123,7 +123,7 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
 
     user_service = UserService(session)
     viewer = await user_service.get_by_telegram_id(callback.from_user.id)
-    can_edit = bool(viewer and viewer.is_manager and order.status == "pending")
+    can_edit = bool(viewer and (viewer.is_manager or viewer.is_admin) and order.status == "pending")
     
     text = build_receipt(order)
     text += f"\n\n🔔 <b>Status:</b> {order.status}\n"
@@ -142,7 +142,7 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
 async def prompt_return_item_quantity(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     user_service = UserService(session)
     viewer = await user_service.get_by_telegram_id(callback.from_user.id)
-    if not viewer or not viewer.is_manager:
+    if not viewer or not (viewer.is_manager or viewer.is_admin):
         await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
         return
 

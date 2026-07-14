@@ -1,95 +1,117 @@
-"""Fully reset the database and seed only categories/products.
+"""Seed base units, categories, and products into the database.
 
-This script drops all existing tables, recreates the schema from the current models,
-and inserts only the requested categories and products.
+This script is idempotent: it adds missing rows only and does not drop tables.
 
-Use locally or on a server with care:
-    python scripts/seed_categories.py
+Run with:
+	python scripts/seed_categories.py
 """
+
+import asyncio
 import logging
 import sys
-import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from config import settings
-from database.models import Base, Category, Product, now_tashkent
+from database.models import Category, Product, Unit, now_tashkent
 
 logger = logging.getLogger("seed")
 logging.basicConfig(level=logging.INFO)
 
-CATEGORIES = [
-    ("travertin", [
-        ("Nova milano", "chelak"),
-        ("Nova leonardo", "chelak"),
-        ("Nova travertino", "chelak"),
-        ("Nova shpaklovka", "chelak"),
-        ("Nova guruntovka", "chelak"),
-    ]),
-    ("lak", [
-        ("Nova lak", "kg"),
-        ("Nova zemshuk", "kg"),
-        ("Nova otochento", "kg"),
-    ]),
-    ("tiyaga", [
-        ("Dela", "metr"),
-        ("Taroq", "metr"),
-        ("Kapalak", "metr"),
-        ("Rels", "metr"),
-        ("Karniz", "metr"),
-        ("Padagonik", "metr"),
-        ("Noshka", "dona"),
-        ("Karnizga gul", "dona"),
-    ]),
+UNITS = ["chelak", "dona", "kg", "metr"]
+
+DATA = [
+	(
+		"lak",
+		[
+			("Nova milano", "chelak"),
+			("Nova lak", "kg"),
+			("Nova zemshuk", "kg"),
+			("Nova otachento", "kg"),
+		],
+	),
+	(
+		"tiyaga",
+		[
+			("Dela", "metr"),
+			("Taroq", "metr"),
+			("Kapalak", "metr"),
+			("Rels", "metr"),
+			("Karniz", "metr"),
+			("Padagolnik", "metr"),
+			("Noshka", "dona"),
+			("Karnizga gul", "dona"),
+		],
+	),
+	(
+		"travertin",
+		[
+			("Nova leonarda", "chelak"),
+			("Nova travertino", "chelak"),
+			("Nova shpaklovka", "chelak"),
+			("Nova guruntovka", "chelak"),
+		],
+	),
 ]
 
 
-def to_sync_url(db_url: str) -> str:
-    return db_url.replace("postgres://", "postgresql+asyncpg://", 1).replace(
-        "postgresql://", "postgresql+asyncpg://", 1
-    )
+def to_asyncpg_url(db_url: str) -> str:
+	return db_url.replace("postgres://", "postgresql+asyncpg://", 1).replace(
+		"postgresql://", "postgresql+asyncpg://", 1
+	)
 
 
 async def main() -> None:
-    db_url = settings.DATABASE_URL
-    if not db_url:
-        logger.error("DATABASE_URL not set")
-        sys.exit(1)
+	db_url = settings.DATABASE_URL
+	if not db_url:
+		logger.error("DATABASE_URL not set")
+		sys.exit(1)
 
-    sync_url = to_sync_url(db_url)
-    logger.info("Connecting to DB: %s", sync_url)
+	engine = create_async_engine(to_asyncpg_url(db_url), echo=False, pool_pre_ping=True)
 
-    engine = create_async_engine(sync_url, echo=False, pool_pre_ping=True)
+	SessionFactory = async_sessionmaker(bind=engine, expire_on_commit=False)
 
-    logger.warning("Dropping all tables and recreating schema from models")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+	async with SessionFactory() as session:
+		existing_units = set((await session.execute(select(Unit.name))).scalars().all())
+		for unit_name in UNITS:
+			if unit_name not in existing_units:
+				session.add(Unit(name=unit_name, created_at=now_tashkent()))
 
-    SessionFactory = async_sessionmaker(bind=engine, expire_on_commit=False)
+		existing_categories = {
+			row.name: row for row in (await session.execute(select(Category))).scalars().all()
+		}
+		existing_products = {
+			row.name: row for row in (await session.execute(select(Product))).scalars().all()
+		}
 
-    async with SessionFactory() as session:
-        logger.info("Seeding categories and products")
-        for category_name, products in CATEGORIES:
-            category = Category(name=category_name, created_at=now_tashkent())
-            session.add(category)
-            await session.flush()
+		for category_name, products in DATA:
+			category = existing_categories.get(category_name)
+			if category is None:
+				category = Category(name=category_name, created_at=now_tashkent())
+				session.add(category)
+				await session.flush()
+				existing_categories[category_name] = category
 
-            for product_name, unit in products:
-                session.add(
-                    Product(
-                        name=product_name,
-                        unit=unit,
-                        category_id=category.id,
-                        created_at=now_tashkent(),
-                    )
-                )
+			for product_name, unit_name in products:
+				if product_name in existing_products:
+					continue
+				session.add(
+					Product(
+						name=product_name,
+						unit=unit_name,
+						category_id=category.id,
+						created_at=now_tashkent(),
+					)
+				)
 
-        await session.commit()
+		await session.commit()
 
-    logger.info("Database reset and seed complete.")
+	logger.info("Base data seed complete.")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+	asyncio.run(main())

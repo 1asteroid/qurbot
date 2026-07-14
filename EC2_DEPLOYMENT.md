@@ -91,6 +91,15 @@ If you need to run a one-off migration script, execute it directly from the same
 python scripts/add_receipt_message_id_migration.py
 ```
 
+If you want to load the base categories and products, run the seeder from the same virtualenv:
+
+```bash
+. .venv/bin/activate
+python scripts/seed_categories.py
+```
+
+If an older deployment still calls `scripts/seed_all.py`, that name is kept as a compatibility wrapper.
+
 ## 6. Run with systemd
 
 Create `/etc/systemd/system/qurbot.service`:
