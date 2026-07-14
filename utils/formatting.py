@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List
-from database.models import Order, OrderItem
+from database.models import Order, OrderItem, OrderReturnItem
 
 
 def format_number(value: float) -> str:
@@ -13,15 +13,60 @@ def format_phone(phone: str) -> str:
     return phone.strip()
 
 
-def _item_extra_label(item: OrderItem) -> str:
-    category_name = (item.product.category.name if item.product and item.product.category else "").strip().lower()
-    if not item.size:
+def _item_suffix(category_name: str, size: str) -> str:
+    if not size:
         return ""
     if category_name == "travertin":
-        return f" | Rang: {item.size}"
+        return f" | Rang: {size}"
     if category_name == "tiya":
-        return f" | Razmer: {item.size}"
-    return f" | {item.size}"
+        return f" | Razmer: {size}"
+    return f" | {size}"
+
+
+def _item_extra_label(item: OrderItem) -> str:
+    category_name = (item.product.category.name if item.product and item.product.category else "").strip().lower()
+    return _item_suffix(category_name, item.size or "")
+
+
+def _return_item_label(item: OrderReturnItem) -> str:
+    category_name = (item.product.category.name if item.product and item.product.category else "").strip().lower()
+    return _item_suffix(category_name, item.size or "")
+
+
+def get_order_returned_total(order: Order) -> float:
+    return sum((item.total_price or 0.0) for item in getattr(order, "return_items", []) or [])
+
+
+def get_order_net_total(order: Order) -> float:
+    return max(0.0, (order.total_sum or 0.0) - get_order_returned_total(order))
+
+
+def get_order_item_returned_quantity(item: OrderItem) -> float:
+    return sum((return_item.quantity or 0.0) for return_item in getattr(item, "return_items", []) or [])
+
+
+def get_order_item_remaining_quantity(item: OrderItem) -> float:
+    return max(0.0, (item.quantity or 0.0) - get_order_item_returned_quantity(item))
+
+
+def build_return_items_text(order: Order) -> str:
+    return_items = getattr(order, "return_items", []) or []
+    if not return_items:
+        return ""
+
+    lines = []
+    lines.append("↩️ <b>Qaytgan mahsulotlar</b>")
+    lines.append("─" * 40)
+    for item in return_items:
+        name = item.product.name[:17]
+        qty = f"{item.quantity:.0f}"
+        price = format_number(item.price)
+        total = format_number(item.total_price)
+        lines.append(f"{name:<18} {qty:<8} {price:<10} {total}{_return_item_label(item)}")
+    lines.append("─" * 40)
+    lines.append(f"↩️ QAYTARILDI: {format_number(get_order_returned_total(order))} UZS")
+    lines.append(f"💰 SOF JAMI: {format_number(get_order_net_total(order))} UZS")
+    return "\n".join(lines)
 
 
 def build_receipt(order: Order) -> str:
@@ -45,6 +90,9 @@ def build_receipt(order: Order) -> str:
 
     lines.append("═" * 40)
     lines.append(f"💰 JAMI: {format_number(order.total_sum)} UZS")
+    return_text = build_return_items_text(order)
+    if return_text:
+        lines.append(return_text)
     lines.append("═" * 40)
     lines.append("✅ Buyurtma tasdiqlandi")
     return "\n".join(lines)
@@ -97,6 +145,6 @@ def build_order_preview(items: List[dict], products_map: dict) -> str:
 def format_order_list_item(order: Order, index: int) -> str:
     return (
         f"{index}. 👤 {order.user.full_name}\n"
-        f"   💰 {format_number(order.total_sum)} UZS\n"
+        f"   💰 {format_number(get_order_net_total(order))} UZS\n"
         f"   📅 {order.created_at.strftime('%d.%m.%Y %H:%M')}"
     )

@@ -8,6 +8,7 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 from reportlab.lib import colors
 from config import settings
+from utils.formatting import get_order_net_total, get_order_returned_total
 
 TZ = pytz.timezone(settings.TIMEZONE)
 
@@ -139,21 +140,6 @@ def generate_receipt_pdf(order) -> BytesIO:
             f"{item.total_price:,.0f}"
         ])
     
-    # Add total row
-    table_data.append([
-        "", "", "", "", "JAMI:", f"{order.total_sum:,.0f}"
-    ])
-    
-    # Add payment info row
-    paid_amount = order.user.paid_sum if hasattr(order.user, 'paid_sum') else 0
-    amount_due = order.user.total_purchase_sum - paid_amount if hasattr(order.user, 'total_purchase_sum') else 0
-    table_data.append([
-        "", "", "", "", "To'langan:", f"{paid_amount:,.0f}"
-    ])
-    table_data.append([
-        "", "", "", "", "To'lanishi kerak:", f"{amount_due:,.0f}"
-    ])
-    
     # Wider column layout for better spacing
     table = Table(table_data, colWidths=[0.5*cm, 3.2*cm, 1.2*cm, 1.5*cm, 2.2*cm, 2.2*cm])
     table.setStyle(TableStyle([
@@ -166,22 +152,79 @@ def generate_receipt_pdf(order) -> BytesIO:
         ('FONTSIZE', (0, 0), (-1, 0), 8),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
         ('TOPPADDING', (0, 0), (-1, 0), 6),
-        ('BACKGROUND', (0, -3), (-1, -1), colors.HexColor('#fff3e0')),
-        ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -3), (-1, -1), 9),
-        ('TOPPADDING', (0, -3), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, -3), (-1, -1), 6),
-        ('BACKGROUND', (0, -3), (-1, -3), colors.HexColor('#f5f5f5')),  # Total row
-        ('BACKGROUND', (0, -2), (-1, -2), colors.HexColor('#c8e6c9')),  # Paid row
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffccbc')),  # Due row
         ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -4), [colors.white, colors.HexColor('#fafafa')]),
-        ('FONTSIZE', (0, 1), (-1, -4), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fafafa')]),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('RIGHTPADDING', (4, 1), (-1, -1), 8),
         ('LEFTPADDING', (4, 1), (-1, -1), 8),
     ]))
     
     elements.append(table)
+    elements.append(Spacer(1, 0.18*cm))
+
+    if getattr(order, "return_items", None):
+        returned_total = get_order_returned_total(order)
+        return_rows = [["#", "Qaytgan mahsulot", "Birligi", "Miqdori", "Narxi (UZS)", "Jami (UZS)"]]
+        for index, item in enumerate(order.return_items, 1):
+            return_rows.append([
+                str(index),
+                f"{item.product.name[:18]}{_item_suffix(item)}",
+                item.product.unit,
+                f"{item.quantity:.2f}",
+                f"{item.price:,.0f}",
+                f"{item.total_price:,.0f}",
+            ])
+        return_table = Table(return_rows, colWidths=[0.5*cm, 3.2*cm, 1.2*cm, 1.5*cm, 2.2*cm, 2.2*cm])
+        return_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ff9800')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('ALIGN', (4, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 5),
+            ('TOPPADDING', (0, 0), (-1, 0), 5),
+            ('GRID', (0, 0), (-1, -1), 0.7, colors.HexColor('#cccccc')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fff8e1')]),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ]))
+        elements.append(Paragraph("↩️ Qaytgan mahsulotlar", header_style))
+        elements.append(return_table)
+        elements.append(Spacer(1, 0.18*cm))
+
+    gross_total = order.total_sum or 0.0
+    returned_total = get_order_returned_total(order)
+    net_total = get_order_net_total(order)
+    paid_amount = order.user.paid_sum if hasattr(order.user, 'paid_sum') else 0
+    amount_due = max(0.0, (order.user.total_purchase_sum - paid_amount) if hasattr(order.user, 'total_purchase_sum') else 0)
+    summary_rows = [
+        ["JAMI", f"{gross_total:,.0f}"],
+    ]
+    if returned_total > 0:
+        summary_rows.append(["QAYTARILDI", f"{returned_total:,.0f}"])
+    summary_rows.extend([
+        ["SOF JAMI", f"{net_total:,.0f}"],
+        ["To'langan", f"{paid_amount:,.0f}"],
+        ["To'lanishi kerak", f"{amount_due:,.0f}"],
+    ])
+    summary_table = Table(summary_rows, colWidths=[4.5*cm, 3.5*cm])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f5f5f5')),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#ffecb3')) if returned_total > 0 else ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#bbdefb')),
+        ('BACKGROUND', (0, -3), (-1, -3), colors.HexColor('#c8e6c9')),
+        ('BACKGROUND', (0, -2), (-1, -2), colors.HexColor('#c8e6c9')),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffccbc')),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f5faff')),
+    ]))
+    elements.append(summary_table)
     elements.append(Spacer(1, 0.3*cm))
     
     # Bottom separator
@@ -244,6 +287,7 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
     # Group by customer
     customer_data = {}
     total_revenue = 0
+    total_returned = 0
     
     for order in period_orders:
         if order.user.id not in customer_data:
@@ -252,9 +296,12 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
                 'orders': [],
                 'total': 0
             }
+        order_net = get_order_net_total(order)
+        order_returned = get_order_returned_total(order)
         customer_data[order.user.id]['orders'].append(order)
-        customer_data[order.user.id]['total'] += order.total_sum
-        total_revenue += order.total_sum
+        customer_data[order.user.id]['total'] += order_net
+        total_revenue += order_net
+        total_returned += order_returned
     
     # Customer summary table
     table_data = [
@@ -318,10 +365,12 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
     
     # Product-wise breakdown table
     product_data = {}
+    returned_product_data = {}
     for order in period_orders:
         for item in order.items:
             if item.product.id not in product_data:
                 product_data[item.product.id] = {
+                    'id': item.product.id,
                     'name': item.product.name,
                     'unit': item.product.unit,
                     'quantity': 0,
@@ -329,6 +378,19 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
                 }
             product_data[item.product.id]['quantity'] += item.quantity
             product_data[item.product.id]['total'] += item.total_price
+        for return_item in getattr(order, "return_items", []) or []:
+            if return_item.product.id not in returned_product_data:
+                returned_product_data[return_item.product.id] = {
+                    'quantity': 0,
+                    'total': 0,
+                }
+            returned_product_data[return_item.product.id]['quantity'] += return_item.quantity
+            returned_product_data[return_item.product.id]['total'] += return_item.total_price
+
+    for product_id, returned_info in returned_product_data.items():
+        if product_id in product_data:
+            product_data[product_id]['quantity'] = max(0.0, product_data[product_id]['quantity'] - returned_info['quantity'])
+            product_data[product_id]['total'] = max(0.0, product_data[product_id]['total'] - returned_info['total'])
     
     if product_data:
         elements.append(Paragraph(
@@ -387,6 +449,7 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
     summary_text = f"""<b>Hisobot Xulosasi:</b><br/>
 Jami Buyurtmalar: {len(period_orders)} ta<br/>
 Jami Daromad: {total_revenue:,.0f} UZS<br/>
+Qaytarilgan Summa: {total_returned:,.0f} UZS<br/>
 To'langan Summa: {total_paid:,.0f} UZS<br/>
 To'lanishi kerak: {total_due:,.0f} UZS<br/>
 O'rtacha Buyurtma: {avg_order:,.0f} UZS"""
@@ -475,7 +538,7 @@ def generate_user_orders_pdf(user, user_orders_list) -> BytesIO:
     elements.append(Paragraph("_" * 80, header_style))
     elements.append(Spacer(1, 0.2*cm))
     total_orders = len(user_orders_list)
-    total_sum = sum(order_info["order"].total_sum for order_info in user_orders_list)
+    total_sum = sum(order_info["total_sum"] for order_info in user_orders_list)
 
     summary_table = Table([
         ["Jami buyurtmalar", str(total_orders), "Umumiy summa", f"{total_sum:,.0f} UZS"]
@@ -543,7 +606,20 @@ def generate_user_orders_pdf(user, user_orders_list) -> BytesIO:
                 f"{item.total_price:,.0f}",
             ])
 
-        order_table_data.append(["", "", "", "", "Buyurtma jami", "", f"{order.total_sum:,.0f}"])
+        if getattr(order, "return_items", None):
+            order_table_data.append(["", "Qaytgan mahsulotlar", "", "", "", "", ""])
+            for return_item in order.return_items:
+                order_table_data.append([
+                    "",
+                    return_item.product.name[:20],
+                    return_item.product.unit,
+                    f"{return_item.quantity:.2f}",
+                    item_label(return_item),
+                    f"{return_item.price:,.0f}",
+                    f"-{return_item.total_price:,.0f}",
+                ])
+
+        order_table_data.append(["", "", "", "", "Buyurtma jami", "", f"{order_info['total_sum']:,.0f}"])
 
         order_table = Table(order_table_data, colWidths=[0.6*cm, 3.0*cm, 1.1*cm, 1.3*cm, 2.4*cm, 1.8*cm, 1.8*cm])
         order_table.setStyle(TableStyle([

@@ -1,5 +1,6 @@
 import logging
 from aiogram import Router, F
+from aiogram.types import CallbackQuery
 from aiogram.types import Message
 from aiogram.filters import Command
 
@@ -44,3 +45,8 @@ async def unknown_message(message: Message):
     await message.answer(
         "❓ Tushunarsiz buyruq. /help yozing yoki menyudan tanlang."
     )
+
+
+@router.callback_query(F.data == "noop")
+async def noop(callback: CallbackQuery):
+    await callback.answer()

@@ -3,6 +3,7 @@ from typing import List, Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.models import User, Product, Order, Category
+from utils.formatting import get_order_item_remaining_quantity, get_order_net_total
 
 
 # ─── User selection ───────────────────────────────────────────────────────────
@@ -176,7 +177,7 @@ def manager_orders_keyboard(orders: List[Order], page: int, total: int, per_page
         from utils import format_number
         status_mark = "✅" if order.status == "accepted" else "⏳"
         status_text = "Qabul qilingan" if order.status == "accepted" else "Qabul qilinmagan"
-        text = f"{status_mark} #{order.id} - {order.user.full_name} ({format_number(order.total_sum)} UZS) | {status_text}"
+        text = f"{status_mark} #{order.id} - {order.user.full_name} ({format_number(get_order_net_total(order))} UZS) | {status_text}"
         builder.row(
             InlineKeyboardButton(text=text, callback_data=f"manager_order_detail:{order.id}")
         )
@@ -361,15 +362,31 @@ def history_user_orders_keyboard(user_id: int, user_orders: List[dict]) -> Inlin
     return builder.as_markup()
 
 
-def history_order_detail_keyboard(order_id: int, user_id: int = None, can_edit: bool = False) -> InlineKeyboardMarkup:
-    """Keyboard for showing order details in history with PDF option"""
+def history_order_detail_keyboard(order: Order, user_id: int = None, can_edit: bool = False) -> InlineKeyboardMarkup:
+    """Keyboard for showing order details in history with return actions."""
     builder = InlineKeyboardBuilder()
     if can_edit:
         builder.row(
-            InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order_id}")
+            InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order.id}")
         )
+
+    for item in order.items:
+        remaining_qty = get_order_item_remaining_quantity(item)
+        item_name = item.product.name[:20]
+        if item.size:
+            item_name = f"{item_name} | {item.size}"
+        if remaining_qty > 0:
+            button_text = f"↩️ {item_name} ({remaining_qty:.0f}/{item.quantity:.0f})"
+            callback_data = f"return_item:{order.id}:{item.id}"
+        else:
+            button_text = f"✅ {item_name} (qaytarildi)"
+            callback_data = "noop"
+        builder.row(
+            InlineKeyboardButton(text=button_text, callback_data=callback_data)
+        )
+
     builder.row(
-        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"history_order_pdf:{order_id}")
+        InlineKeyboardButton(text="📄 PDF olish", callback_data=f"history_order_pdf:{order.id}")
     )
     # Go back to user's orders list
     back_callback = f"history_user:{user_id}" if user_id else "history_users_list"

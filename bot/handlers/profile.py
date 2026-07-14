@@ -196,15 +196,17 @@ async def update_phone(message: Message, state: FSMContext, session: AsyncSessio
 @router.message((F.text == "📋 Mening buyurtmalarim") | (F.text == "🧾 Mening buyurtmalarim"))
 async def show_my_orders_message(message: Message, session: AsyncSession):
     """Foydalanuvchining o'z buyurtmalarini ko'rish (reply keyboard orqali)"""
+    service = OrderService(session)
     user_service = UserService(session)
     user = await user_service.get_by_telegram_id(message.from_user.id)
-    
+
     if not user or user.is_manager:
         await message.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.")
         return
-    
-    # Foydalanuvchining buyurtmalarini olish
-    if not user.orders:
+
+    user_orders = await service.get_user_orders_summary(message.from_user.id)
+
+    if not user_orders:
         await message.answer(
             "📋 <b>Mening Buyurtmalarim</b>\n\n"
             "Siz hali buyurtma bermagansiz.",
@@ -215,8 +217,9 @@ async def show_my_orders_message(message: Message, session: AsyncSession):
     builder = InlineKeyboardBuilder()
     
     text = "📋 <b>Mening Buyurtmalarim</b>\n\n"
-    for order in reversed(user.orders):  # Eng yangi birinchi
-        total = format_number(order.total_sum)
+    for order_info in reversed(user_orders):  # Eng yangi birinchi
+        order = order_info["order"]
+        total = format_number(order_info["total_sum"])
         builder.row(
             InlineKeyboardButton(
                 text=f"🧾 #{order.id} - {total} UZS",
@@ -239,15 +242,17 @@ async def show_my_orders_message(message: Message, session: AsyncSession):
 @router.callback_query(F.data == "my_orders")
 async def show_my_orders(callback: CallbackQuery, session: AsyncSession):
     """Foydalanuvchining o'z buyurtmalarini ko'rish (inline orqali)"""
+    service = OrderService(session)
     user_service = UserService(session)
     user = await user_service.get_by_telegram_id(callback.from_user.id)
-    
+
     if not user or user.is_manager:
         await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
         return
-    
-    # Foydalanuvchining buyurtmalarini olish
-    if not user.orders:
+
+    user_orders = await service.get_user_orders_summary(callback.from_user.id)
+
+    if not user_orders:
         await callback.message.edit_text(
             "📋 <b>Mening Buyurtmalarim</b>\n\n"
             "Siz hali buyurtma bermagansiz.",
@@ -259,8 +264,9 @@ async def show_my_orders(callback: CallbackQuery, session: AsyncSession):
     builder = InlineKeyboardBuilder()
     
     text = "📋 <b>Mening Buyurtmalarim</b>\n\n"
-    for order in reversed(user.orders):  # Eng yangi birinchi
-        total = format_number(order.total_sum)
+    for order_info in reversed(user_orders):  # Eng yangi birinchi
+        order = order_info["order"]
+        total = format_number(order_info["total_sum"])
         builder.row(
             InlineKeyboardButton(
                 text=f"🧾 #{order.id} - {total} UZS",

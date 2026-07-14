@@ -1,5 +1,5 @@
 from database.db import init_db, AsyncSessionFactory, get_session
-from database.models import User, Product, Order, OrderItem, Category, Unit, Base
+from database.models import User, Product, Order, OrderItem, OrderReturnItem, Category, Unit, Base
 
 __all__ = [
     "init_db",
@@ -9,6 +9,7 @@ __all__ = [
     "Product",
     "Order",
     "OrderItem",
+    "OrderReturnItem",
     "Category",
     "Unit",
     "Base",

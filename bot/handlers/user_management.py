@@ -113,9 +113,10 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
     )
     
     # Buyurtmalar statistikasi
-    if user.orders:
-        total_sum = sum(o.total_sum for o in user.orders)
-        text += f"\n📦 <b>Buyurtmalar:</b> {len(user.orders)} ta\n"
+    user_orders = await user_service.get_user_orders_summary(user.id)
+    if user_orders:
+        total_sum = sum(o["total_sum"] for o in user_orders)
+        text += f"\n📦 <b>Buyurtmalar:</b> {len(user_orders)} ta\n"
         text += f"💰 <b>Jami summa:</b> {format_number(total_sum)} UZS\n"
     
     builder = InlineKeyboardBuilder()

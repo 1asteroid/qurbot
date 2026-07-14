@@ -8,12 +8,21 @@ from bot.keyboards import (
     history_users_list_keyboard, 
     history_user_orders_keyboard,
     history_order_detail_keyboard,
+    order_receipt_keyboard,
     main_menu_keyboard,
     cancel_keyboard,
 )
-from bot.states import PaymentStates
+from bot.states import PaymentStates, ReturnStates
 from services import OrderService, UserService
-from utils import format_number, build_receipt, generate_receipt_pdf, generate_user_orders_pdf
+from utils import (
+    format_number,
+    build_receipt,
+    build_receipt_with_status,
+    generate_receipt_pdf,
+    generate_user_orders_pdf,
+)
+from utils.formatting import get_order_item_remaining_quantity
+from utils.receipt_delivery import sync_order_receipt_message
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -124,7 +133,57 @@ async def show_order_detail_history(callback: CallbackQuery, session: AsyncSessi
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=history_order_detail_keyboard(order_id, user_id or order.user_id, can_edit=can_edit)
+        reply_markup=history_order_detail_keyboard(order, user_id or order.user_id, can_edit=can_edit)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("return_item:"))
+async def prompt_return_item_quantity(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    user_service = UserService(session)
+    viewer = await user_service.get_by_telegram_id(callback.from_user.id)
+    if not viewer or not viewer.is_manager:
+        await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    order_id = int(parts[1])
+    order_item_id = int(parts[2])
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+    if not order:
+        await callback.answer("Buyurtma topilmadi.", show_alert=True)
+        return
+
+    order_item = next((item for item in order.items if item.id == order_item_id), None)
+    if not order_item:
+        await callback.answer("Mahsulot topilmadi.", show_alert=True)
+        return
+
+    remaining_qty = get_order_item_remaining_quantity(order_item)
+    if remaining_qty <= 0:
+        await callback.answer("Bu mahsulot allaqachon to'liq qaytarilgan.", show_alert=True)
+        return
+
+    await state.set_state(ReturnStates.entering_quantity)
+    await state.update_data(
+        order_id=order_id,
+        order_item_id=order_item_id,
+        history_user_id=order.user_id,
+    )
+
+    item_name = order_item.product.name
+    if order_item.size:
+        item_name = f"{item_name} ({order_item.size})"
+
+    await callback.message.answer(
+        f"↩️ <b>Qaytgan mahsulot</b>\n\n"
+        f"📦 Mahsulot: <b>{item_name}</b>\n"
+        f"📥 Qolgan miqdor: <b>{remaining_qty:.2f}</b>\n\n"
+        f"Qaytariladigan miqdorni kiriting:",
+        parse_mode="HTML",
+        reply_markup=cancel_keyboard(),
     )
     await callback.answer()
 
@@ -151,6 +210,86 @@ async def download_order_pdf_history(callback: CallbackQuery, session: AsyncSess
         caption=f"📄 Buyurtma #{order_id} PDF",
     )
     await callback.answer("✅ PDF yuklandi!")
+
+
+@router.message(ReturnStates.entering_quantity)
+async def process_return_quantity(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer("Bekor qilindi.", reply_markup=main_menu_keyboard())
+        return
+
+    try:
+        quantity = float(message.text.strip())
+        if quantity <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Noto'g'ri format. Miqdorni raqam bilan kiriting.")
+        return
+
+    data = await state.get_data()
+    order_id = data.get("order_id")
+    order_item_id = data.get("order_item_id")
+    history_user_id = data.get("history_user_id")
+    if not order_id or not order_item_id:
+        await state.clear()
+        await message.answer("❌ Qaytarish holati topilmadi.")
+        return
+
+    service = OrderService(session)
+    order = await service.get_order_with_details(order_id)
+    if not order:
+        await state.clear()
+        await message.answer("❌ Buyurtma topilmadi.")
+        return
+
+    order_item = next((item for item in order.items if item.id == order_item_id), None)
+    if not order_item:
+        await state.clear()
+        await message.answer("❌ Mahsulot topilmadi.")
+        return
+
+    remaining_qty = get_order_item_remaining_quantity(order_item)
+    if quantity > remaining_qty:
+        await message.answer(f"❌ Maksimal qaytarish miqdori: {remaining_qty:.2f}")
+        return
+
+    try:
+        return_item = await service.add_return_item(order_item_id=order_item_id, quantity=quantity)
+    except ValueError:
+        await message.answer("❌ Qaytarish miqdori noto'g'ri.")
+        return
+
+    if not return_item:
+        await state.clear()
+        await message.answer("❌ Qaytarish saqlanmadi.")
+        return
+
+    updated_order = await service.get_order_with_details(order_id)
+    if updated_order:
+        receipt_text = build_receipt_with_status(updated_order)
+        try:
+            await sync_order_receipt_message(
+                bot=bot,
+                session=session,
+                order=updated_order,
+                text=f"<pre>{receipt_text}</pre>",
+                reply_markup=order_receipt_keyboard(
+                    updated_order.id,
+                    can_accept=updated_order.status == "pending",
+                    back_callback="my_orders",
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Could not sync returned receipt for order %s: %s", updated_order.id, exc)
+
+        await message.answer(
+            f"✅ Qaytarish saqlandi.\n\n<pre>{receipt_text}</pre>",
+            parse_mode="HTML",
+            reply_markup=history_order_detail_keyboard(updated_order, history_user_id or updated_order.user_id, can_edit=updated_order.status == "pending"),
+        )
+
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith("history_user_pdf:"))

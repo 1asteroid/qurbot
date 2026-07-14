@@ -45,3 +45,7 @@ class MonitoringStates(StatesGroup):
 
 class PaymentStates(StatesGroup):
     entering_amount = State()
+
+
+class ReturnStates(StatesGroup):
+    entering_quantity = State()

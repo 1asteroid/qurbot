@@ -103,6 +103,7 @@ class Order(Base):
         foreign_keys="Order.manager_id"
     )
     items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order", lazy="selectin", cascade="all, delete-orphan")
+    return_items: Mapped[List["OrderReturnItem"]] = relationship("OrderReturnItem", back_populates="order", lazy="selectin", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Order id={self.id} user_id={self.user_id} total={self.total_sum}>"
@@ -121,6 +122,28 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship("Order", back_populates="items", lazy="selectin")
     product: Mapped["Product"] = relationship("Product", back_populates="order_items", lazy="selectin")
+    return_items: Mapped[List["OrderReturnItem"]] = relationship("OrderReturnItem", back_populates="order_item", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<OrderItem order={self.order_id} product={self.product_id}>"
+
+
+class OrderReturnItem(Base):
+    __tablename__ = "order_return_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id"), nullable=False)
+    order_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("order_items.id"), nullable=False)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    total_price: Mapped[float] = mapped_column(Float, nullable=False)
+    size: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_tashkent, nullable=False)
+
+    order: Mapped["Order"] = relationship("Order", back_populates="return_items", lazy="selectin")
+    order_item: Mapped["OrderItem"] = relationship("OrderItem", back_populates="return_items", lazy="selectin")
+    product: Mapped["Product"] = relationship("Product", lazy="selectin")
+
+    def __repr__(self) -> str:
+        return f"<OrderReturnItem order={self.order_id} order_item={self.order_item_id} product={self.product_id}>"
