@@ -17,7 +17,7 @@ from bot.keyboards import (
     cancel_keyboard,
 )
 from services import UserService, ProductService, OrderService
-from utils import build_receipt_with_status, build_order_preview, format_number
+from utils import build_receipt_with_status, build_order_preview, format_number, format_quantity
 from utils.receipt_delivery import sync_order_receipt_message
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def _build_selection_summary(order_items: List[dict], products_map: dict) -> str
         size = item.get("size")
         size_text = f" | 📏 {size}" if size else ""
         lines.append(
-            f"• {name}{size_text}: {item['quantity']:.0f} × {format_number(item['price'])} = {format_number(line_total)} UZS"
+            f"• {name}{size_text}: {format_quantity(item['quantity'])} × {format_number(item['price'])} = {format_number(line_total)} UZS"
         )
     lines.append(f"💰 <b>Jami: {format_number(total_sum)} UZS</b>")
     return "\n".join(lines)
@@ -449,7 +449,7 @@ async def process_price(message: Message, state: FSMContext, session: AsyncSessi
     await message.answer(
         f"👤 Mijoz: <b>{customer_name}</b>\n\n"
         f"{action_text}\n"
-        f"💰 {quantity:.0f} × {format_number(price)} = {format_number(total_price)} UZS{size_text}\n\n"
+        f"💰 {format_quantity(quantity)} × {format_number(price)} = {format_number(total_price)} UZS{size_text}\n\n"
         f"{summary_text}\n\n"
         f"📦 <b>Mahsulotlarni tanlang</b> (bir nechta tanlash mumkin):",
         parse_mode="HTML",

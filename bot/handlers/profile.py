@@ -13,7 +13,8 @@ from bot.keyboards import (
     order_receipt_keyboard,
 )
 from services import UserService, OrderService
-from utils import build_receipt_with_status, format_number
+from utils import build_receipt_with_status, format_number, format_quantity
+from utils.formatting import get_order_net_total, get_order_returned_total
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -204,7 +205,7 @@ async def show_my_orders_message(message: Message, session: AsyncSession):
         await message.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.")
         return
 
-    user_orders = await service.get_user_orders_summary(message.from_user.id)
+    user_orders = await service.get_user_orders_summary(user.id)
 
     if not user_orders:
         await message.answer(
@@ -217,7 +218,7 @@ async def show_my_orders_message(message: Message, session: AsyncSession):
     builder = InlineKeyboardBuilder()
     
     text = "📋 <b>Mening Buyurtmalarim</b>\n\n"
-    for order_info in reversed(user_orders):  # Eng yangi birinchi
+    for order_info in user_orders:
         order = order_info["order"]
         total = format_number(order_info["total_sum"])
         builder.row(
@@ -250,7 +251,7 @@ async def show_my_orders(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Sizda bu bo'limga kirish huquqi yo'q.", show_alert=True)
         return
 
-    user_orders = await service.get_user_orders_summary(callback.from_user.id)
+    user_orders = await service.get_user_orders_summary(user.id)
 
     if not user_orders:
         await callback.message.edit_text(
@@ -264,7 +265,7 @@ async def show_my_orders(callback: CallbackQuery, session: AsyncSession):
     builder = InlineKeyboardBuilder()
     
     text = "📋 <b>Mening Buyurtmalarim</b>\n\n"
-    for order_info in reversed(user_orders):  # Eng yangi birinchi
+    for order_info in user_orders:
         order = order_info["order"]
         total = format_number(order_info["total_sum"])
         builder.row(
@@ -367,14 +368,17 @@ async def accept_order_handler(callback: CallbackQuery, session: AsyncSession, b
                 f"📦 Buyurtma #: {order.id}\n"
                 f"👤 Mijoz: {order.user.full_name}\n"
                 f"📱 Tel: {order.user.phone}\n"
-                f"💰 Summa: {format_number(order.total_sum)} UZS\n"
+                f"💰 Summa: {format_number(get_order_net_total(order))} UZS\n"
                 f"✅ Qabul vaqti: {order.accepted_at.strftime('%d.%m.%Y %H:%M')}\n"
             )
+            returned_total = get_order_returned_total(order)
+            if returned_total > 0:
+                manager_text += f"↩️ Qaytarilgan: {format_number(returned_total)} UZS\n"
             
             # Add items info
             manager_text += "\n📋 <b>Buyurtma tarkibi:</b>\n"
             for item in order.items:
-                manager_text += f"  • {item.product.name}: {item.quantity:.0f} {item.product.unit} × {format_number(item.price)} = {format_number(item.total_price)} UZS\n"
+                manager_text += f"  • {item.product.name}: {format_quantity(item.quantity)} {item.product.unit} × {format_number(item.price)} = {format_number(item.total_price)} UZS\n"
             
             await bot.send_message(
                 chat_id=order.manager.telegram_id,

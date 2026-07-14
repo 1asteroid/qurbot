@@ -27,6 +27,14 @@ class OrderService:
     def _order_net_total_expr(self):
         return Order.total_sum - self._order_return_total_expr()
 
+    @staticmethod
+    def _order_net_total(order: Order) -> float:
+        returned_total = sum(
+            (item.total_price or 0.0)
+            for item in getattr(order, "return_items", []) or []
+        )
+        return max(0.0, (order.total_sum or 0.0) - returned_total)
+
     async def create_order(
         self,
         user_id: int,
@@ -223,15 +231,7 @@ class OrderService:
 
         rows.sort(key=lambda item: item["total_revenue"], reverse=True)
         rows = rows[:limit]
-        return [
-            {
-                "name": row.name,
-                "unit": row.unit,
-                "total_qty": row.total_qty,
-                "total_revenue": row.total_revenue,
-            }
-            for row in rows
-        ]
+        return rows
 
     async def get_orders_by_user(self, user_id: int, limit: int = 10, offset: int = 0) -> tuple[List[Order], int]:
         """Get orders for a specific user with pagination"""
@@ -244,7 +244,13 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
+                selectinload(Order.items)
+                .selectinload(OrderItem.product)
+                .selectinload(Product.category),
+                selectinload(Order.items).selectinload(OrderItem.return_items),
+                selectinload(Order.return_items)
+                .selectinload(OrderReturnItem.product)
+                .selectinload(Product.category),
             )
             .where(Order.user_id == user_id)
             .order_by(desc(Order.created_at))
@@ -275,7 +281,7 @@ class OrderService:
         )
         orders = list(result.scalars().all())
         
-        total_sum = sum(max(0.0, (o.total_sum or 0.0) - sum((r.total_price or 0.0) for r in o.return_items or [])) for o in orders)
+        total_sum = sum(self._order_net_total(order) for order in orders)
         stats = {
             "count": len(orders),
             "total": total_sum,
@@ -403,7 +409,16 @@ class OrderService:
         )
         self.session.add(return_item)
 
-        user = order_item.order.user if order_item.order else await self._get_user_by_id(order_item.order.user_id)
+        order = order_item.order
+        if not order:
+            order_result = await self.session.execute(
+                select(Order)
+                .options(selectinload(Order.user))
+                .where(Order.id == order_item.order_id)
+            )
+            order = order_result.scalar_one_or_none()
+
+        user = order.user if order else None
         if user:
             user.total_purchase_sum = max(0.0, (user.total_purchase_sum or 0.0) - total_price)
             self.session.add(user)
@@ -436,8 +451,7 @@ class OrderService:
 
         user = await self._get_user_by_id(order.user_id)
         if user:
-            returned_total = sum((item.total_price or 0.0) for item in order.return_items or [])
-            net_total = max(0.0, (order.total_sum or 0.0) - returned_total)
+            net_total = self._order_net_total(order)
             user.total_purchase_sum = max(0.0, (user.total_purchase_sum or 0.0) - net_total)
             self.session.add(user)
 

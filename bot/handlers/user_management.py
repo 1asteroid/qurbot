@@ -113,7 +113,7 @@ async def user_detail(callback: CallbackQuery, session: AsyncSession):
     )
     
     # Buyurtmalar statistikasi
-    user_orders = await user_service.get_user_orders_summary(user.id)
+    user_orders = await OrderService(session).get_user_orders_summary(user.id)
     if user_orders:
         total_sum = sum(o["total_sum"] for o in user_orders)
         text += f"\n📦 <b>Buyurtmalar:</b> {len(user_orders)} ta\n"
@@ -406,7 +406,7 @@ async def manager_report(callback: CallbackQuery, session: AsyncSession, bot: Bo
     """Manager hisobot - PDF shaklida bugungi/oylik buyurtmalar"""
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
-    from database.models import Order, OrderItem
+    from database.models import Order, OrderItem, OrderReturnItem, Product
     
     user_service = UserService(session)
     manager = await user_service.get_by_telegram_id(callback.from_user.id)
@@ -429,7 +429,13 @@ async def manager_report(callback: CallbackQuery, session: AsyncSession, bot: Bo
         .where(Order.created_at <= today_end)
         .options(
             selectinload(Order.user),
-            selectinload(Order.items).selectinload(OrderItem.product)
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.category),
+            selectinload(Order.items).selectinload(OrderItem.return_items),
+            selectinload(Order.return_items)
+            .selectinload(OrderReturnItem.product)
+            .selectinload(Product.category),
         )
     )
     period_orders = list(result.scalars().all())

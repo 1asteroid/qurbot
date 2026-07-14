@@ -1,5 +1,6 @@
 from utils.formatting import (
     format_number,
+    format_quantity,
     format_phone,
     build_receipt,
     build_receipt_with_status,
@@ -14,6 +15,7 @@ from utils.pdf_generator import (
 
 __all__ = [
     "format_number",
+    "format_quantity",
     "format_phone",
     "build_receipt",
     "build_receipt_with_status",

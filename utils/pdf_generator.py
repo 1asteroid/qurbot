@@ -54,7 +54,7 @@ def generate_receipt_pdf(order) -> BytesIO:
     
     # Company header
     company_header = Paragraph(
-        "«NOVASTONE» FIRMA<br/>"
+        "«EcoMaxi» FIRMA<br/>"
         "<font size='9'>Qurilish materiallari do'koni</font>",
         ParagraphStyle(
             'CompanyHeader',
@@ -208,13 +208,11 @@ def generate_receipt_pdf(order) -> BytesIO:
         ["To'langan", f"{paid_amount:,.0f}"],
         ["To'lanishi kerak", f"{amount_due:,.0f}"],
     ])
-    summary_table = Table(summary_rows, colWidths=[4.5*cm, 3.5*cm])
-    summary_table.setStyle(TableStyle([
+    summary_styles = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f5f5f5')),
-        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#ffecb3')) if returned_total > 0 else ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#bbdefb')),
-        ('BACKGROUND', (0, -3), (-1, -3), colors.HexColor('#c8e6c9')),
-        ('BACKGROUND', (0, -2), (-1, -2), colors.HexColor('#c8e6c9')),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ffccbc')),
+        ('BACKGROUND', (0, len(summary_rows) - 3), (-1, len(summary_rows) - 3), colors.HexColor('#bbdefb')),
+        ('BACKGROUND', (0, len(summary_rows) - 2), (-1, len(summary_rows) - 2), colors.HexColor('#c8e6c9')),
+        ('BACKGROUND', (0, len(summary_rows) - 1), (-1, len(summary_rows) - 1), colors.HexColor('#ffccbc')),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cccccc')),
@@ -223,7 +221,13 @@ def generate_receipt_pdf(order) -> BytesIO:
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f5faff')),
-    ]))
+    ]
+    if returned_total > 0:
+        summary_styles.append(
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#ffecb3'))
+        )
+    summary_table = Table(summary_rows, colWidths=[4.5*cm, 3.5*cm])
+    summary_table.setStyle(TableStyle(summary_styles))
     elements.append(summary_table)
     elements.append(Spacer(1, 0.3*cm))
     
@@ -245,7 +249,7 @@ def generate_manager_report_pdf(manager, period_orders) -> BytesIO:
     
     # Company header
     company_header = Paragraph(
-        "«NOVASTONE» FIRMA<br/>"
+        "«EcoMaxi» FIRMA<br/>"
         "<font size='9'>Qurilish materiallari do'koni</font>",
         ParagraphStyle(
             'CompanyHeader',
@@ -459,7 +463,7 @@ O'rtacha Buyurtma: {avg_order:,.0f} UZS"""
     
     # Footer
     footer_text = Paragraph(
-        "«NOVASTONE» FIRMA<br/>"
+        "«EcoMaxi» FIRMA<br/>"
         "<font size='9'><i>Raxmat!</i></font>",
         ParagraphStyle(
             'Footer',
@@ -487,7 +491,7 @@ def generate_user_orders_pdf(user, user_orders_list) -> BytesIO:
     
     # Company header
     company_header = Paragraph(
-        "«NOVASTONE» FIRMA<br/>"
+        "«EcoMaxi» FIRMA<br/>"
         "<font size='9'>Qurilish materiallari do'koni</font>",
         ParagraphStyle(
             'CompanyHeader',

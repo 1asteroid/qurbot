@@ -8,6 +8,11 @@ def format_number(value: float) -> str:
     return f"{value:,.0f}".replace(",", " ")
 
 
+def format_quantity(value: float) -> str:
+    """Format quantity without hiding decimal precision."""
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def format_phone(phone: str) -> str:
     """Normalize phone number display."""
     return phone.strip()
@@ -63,7 +68,7 @@ def build_return_items_text(order: Order) -> str:
     lines.append("─" * 40)
     for item in return_items:
         name = item.product.name[:17]
-        qty = f"{item.quantity:.0f}"
+        qty = format_quantity(item.quantity)
         price = format_number(item.price)
         total = format_number(item.total_price)
         lines.append(f"{name:<18} {qty:<8} {price:<10} {total}{_return_item_label(item)}")
@@ -87,7 +92,7 @@ def build_receipt(order: Order) -> str:
 
     for item in order.items:
         name = item.product.name[:17]
-        qty = f"{item.quantity:.0f}"
+        qty = format_quantity(item.quantity)
         price = format_number(item.price)
         total = format_number(item.total_price)
         lines.append(f"{name:<18} {qty:<8} {price:<10} {total}{_item_extra_label(item)}")
@@ -138,7 +143,7 @@ def build_order_preview(items: List[dict], products_map: dict) -> str:
             size_text = ""
         lines.append(
             f"{i}. <b>{name}</b>{size_text}\n"
-            f"   {qty:.0f} × {format_number(price)} = {format_number(t)} UZS"
+            f"   {format_quantity(qty)} × {format_number(price)} = {format_number(t)} UZS"
         )
 
     lines.append("─" * 35)

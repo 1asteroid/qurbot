@@ -3,7 +3,12 @@ from typing import List, Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.models import User, Product, Order, Category
-from utils.formatting import get_order_item_remaining_quantity, get_order_net_total, order_has_returnable_items
+from utils.formatting import (
+    format_quantity,
+    get_order_item_remaining_quantity,
+    get_order_net_total,
+    order_has_returnable_items,
+)
 
 
 # ─── User selection ───────────────────────────────────────────────────────────
@@ -387,7 +392,7 @@ def history_return_items_keyboard(order: Order, user_id: int = None) -> InlineKe
         remaining_qty = get_order_item_remaining_quantity(item)
         item_name = _return_item_button_label(item)
         if remaining_qty > 0:
-            button_text = f"📦 {item_name} ({remaining_qty:.0f}/{item.quantity:.0f})"
+            button_text = f"📦 {item_name} ({format_quantity(remaining_qty)}/{format_quantity(item.quantity)})"
             callback_data = f"return_item:{order.id}:{item.id}"
         else:
             button_text = f"✅ {item_name} (qaytarildi)"

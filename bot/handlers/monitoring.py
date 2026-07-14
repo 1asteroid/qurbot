@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.states import MonitoringStates
 from bot.keyboards import monitoring_keyboard, monitoring_report_keyboard
 from services import OrderService, UserService
-from utils import format_number, generate_manager_report_pdf
+from utils import format_number, format_quantity, generate_manager_report_pdf
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -205,7 +205,7 @@ async def top_products(callback: CallbackQuery, state: FSMContext, session: Asyn
     for i, item in enumerate(top, 1):
         lines.append(
             f"{i}. <b>{item['name']}</b> ({item['unit']})\n"
-            f"   📦 Sotilgan: {item['total_qty']:.0f} {item['unit']}\n"
+            f"   📦 Sotilgan: {format_quantity(item['total_qty'])} {item['unit']}\n"
             f"   💰 Daromad: {format_number(item['total_revenue'])} UZS\n"
         )
 

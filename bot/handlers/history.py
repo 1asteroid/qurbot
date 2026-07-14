@@ -17,6 +17,7 @@ from bot.states import PaymentStates, ReturnStates
 from services import OrderService, UserService
 from utils import (
     format_number,
+    format_quantity,
     build_receipt,
     build_receipt_with_status,
     generate_receipt_pdf,
@@ -224,7 +225,7 @@ async def prompt_return_item_quantity(callback: CallbackQuery, state: FSMContext
     await callback.message.answer(
         f"↩️ <b>Qaytgan mahsulot</b>\n\n"
         f"📦 Mahsulot: <b>{item_name}</b>\n"
-        f"📥 Qolgan miqdor: <b>{remaining_qty:.2f}</b>\n\n"
+        f"📥 Qolgan miqdor: <b>{format_quantity(remaining_qty)}</b>\n\n"
         f"Qaytariladigan miqdorni kiriting:",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
@@ -295,7 +296,7 @@ async def process_return_quantity(message: Message, state: FSMContext, session: 
 
     remaining_qty = get_order_item_remaining_quantity(order_item)
     if quantity > remaining_qty:
-        await message.answer(f"❌ Maksimal qaytarish miqdori: {remaining_qty:.2f}")
+        await message.answer(f"❌ Maksimal qaytarish miqdori: {format_quantity(remaining_qty)}")
         return
 
     try:
