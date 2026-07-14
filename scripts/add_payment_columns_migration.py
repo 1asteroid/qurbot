@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from config import settings
+from ..config import settings
 
 logger = logging.getLogger("migration")
 logging.basicConfig(level=logging.INFO)

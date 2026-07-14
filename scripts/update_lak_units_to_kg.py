@@ -16,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from config import settings
-from database.models import Category, Product
+from ..config import settings
+from ..database.models import Category, Product
 
 
 logging.basicConfig(level=logging.INFO)

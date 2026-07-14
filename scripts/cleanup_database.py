@@ -16,8 +16,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import text
-from database.db import engine
-from config import settings
+from ..database.db import engine
+from ..config import settings
 
 logger = logging.getLogger("cleanup")
 

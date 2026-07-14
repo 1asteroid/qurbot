@@ -4,7 +4,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Order
+from ..database.models import Order
 
 logger = logging.getLogger(__name__)
 
