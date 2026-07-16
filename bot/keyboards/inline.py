@@ -215,7 +215,12 @@ def manager_orders_keyboard(orders: List[Order], page: int, total: int, per_page
     return builder.as_markup()
 
 
-def manager_order_detail_keyboard(order_id: int, status: str, can_delete: bool = False) -> InlineKeyboardMarkup:
+def manager_order_detail_keyboard(
+    order_id: int,
+    status: str,
+    can_delete: bool = False,
+    can_return: bool = True,
+) -> InlineKeyboardMarkup:
     """Keyboard for viewing manager order details"""
     builder = InlineKeyboardBuilder()
     if status == "accepted":
@@ -228,6 +233,10 @@ def manager_order_detail_keyboard(order_id: int, status: str, can_delete: bool =
         )
         builder.row(
             InlineKeyboardButton(text="✏️ Buyurtmani tahrirlash", callback_data=f"edit_pending_order:{order_id}")
+        )
+    if can_return:
+        builder.row(
+            InlineKeyboardButton(text="↩️ Qaytgan maxsulotlar", callback_data=f"return_menu:{order_id}")
         )
     if can_delete:
         builder.row(
