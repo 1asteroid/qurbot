@@ -2,8 +2,8 @@ import logging
 from typing import Optional, List
 from sqlalchemy import select, or_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..config import settings
-from ..database.models import User
+from config import settings
+from database.models import User
 
 logger = logging.getLogger(__name__)
 

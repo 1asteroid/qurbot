@@ -3,7 +3,7 @@ from typing import Optional, List
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from ..database.models import Product, Category
+from database.models import Product, Category
 
 logger = logging.getLogger(__name__)
 

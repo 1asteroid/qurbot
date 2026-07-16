@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import select, desc, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database.models import Unit, Product
+from database.models import Unit, Product
 
 logger = logging.getLogger(__name__)
 
