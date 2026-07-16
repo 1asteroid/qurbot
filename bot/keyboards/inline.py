@@ -415,7 +415,7 @@ def history_order_detail_keyboard(
     order: Order,
     user_id: int = None,
     can_edit: bool = False,
-    can_return: bool = False,
+    can_return: bool = True,
 ) -> InlineKeyboardMarkup:
     """Keyboard for showing order details in history with return actions."""
     builder = InlineKeyboardBuilder()
